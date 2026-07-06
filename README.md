@@ -32,6 +32,7 @@ fois ses résultats mesurés, on l'autorise à **agir**, sous quota, garde-fous 
 - `cours-agent-mail-24-7.html` : le cours technique complet (à ouvrir dans un navigateur)
 - `PROMPTS-agent-mail.md` : les prompts utilisés par l'agent
 - `PLAN-TRAVAIL-agent-mail.md` : le plan d'action pour construire le système
+- `OUTILS-agent-mail.md` : les outils et briques techniques du projet
 
 ## Note
 
