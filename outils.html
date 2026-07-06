@@ -1,0 +1,138 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Outils — Agent Mail 24/7</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#EAEDEF;color:#1B222C;font-family:'Inter',system-ui,sans-serif;line-height:1.65}
+
+.xnav{display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:#0E141B;color:#CBD5E2;
+ padding:10px 20px;font-family:'Space Mono',ui-monospace,SFMono-Regular,monospace;font-size:13px}
+.xnav .xnav__b{font-family:'Bricolage Grotesque','Space Grotesk',Inter,sans-serif;font-weight:700;
+ color:#fff;font-size:15.5px;letter-spacing:-.01em;margin-right:14px;text-decoration:none}
+.xnav a{color:#9BA7BA;text-decoration:none;padding:6px 11px;border-radius:7px;transition:.15s}
+.xnav a:hover{color:#fff;background:rgba(255,255,255,.09)}
+.xnav a.active{color:#fff;background:#4B45E6}
+.xnav .sp{flex:1 1 auto}
+.xnav a.ext{color:#8F8CF7}
+
+.doc{max-width:900px;margin:26px auto;background:#fff;border:1px solid #DBDFE4;border-radius:16px;
+ box-shadow:0 30px 60px -44px rgba(20,28,44,.35);padding:44px clamp(20px,5vw,56px) 60px}
+.doc h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(1.9rem,4vw,2.6rem);
+ letter-spacing:-.025em;line-height:1.05;margin:8px 0 18px}
+.doc h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.02em;
+ margin:38px 0 12px;padding-top:20px;border-top:1px solid #EBEEF1}
+.doc h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:1.18rem;margin:26px 0 8px}
+.doc h4{font-weight:700;font-size:1rem;margin:20px 0 6px;color:#3A4353}
+.doc p{margin:0 0 14px;color:#38414F}
+.doc a{color:#4B45E6;text-decoration:none} .doc a:hover{text-decoration:underline}
+.doc strong{color:#141A22;font-weight:600}
+.doc ul,.doc ol{margin:0 0 16px;padding-left:24px} .doc li{margin:5px 0;color:#38414F}
+.doc code{font-family:'Space Mono',ui-monospace,monospace;font-size:.86em;background:#EEF0F3;
+ color:#3A2FC9;padding:1.5px 6px;border-radius:5px}
+.doc pre{background:#0E141B;color:#D7DEE8;border-radius:12px;padding:16px 18px;overflow-x:auto;margin:0 0 18px}
+.doc pre code{background:none;color:inherit;padding:0;font-size:12.6px;line-height:1.7}
+.doc blockquote{border-left:3px solid #4B45E6;background:#F6F5FE;margin:0 0 18px;padding:12px 18px;
+ border-radius:0 10px 10px 0;color:#4A5464;font-size:.96rem}
+.doc hr{border:0;border-top:1px solid #E4E8EE;margin:26px 0}
+.tbl{overflow-x:auto;margin:0 0 20px}
+.doc table{border-collapse:collapse;width:100%;font-size:14px}
+.doc th{background:#F1F0FC;color:#2A2270;text-align:left;font-weight:600;padding:9px 12px;border:1px solid #E1E4EA}
+.doc td{padding:9px 12px;border:1px solid #EBEEF1;color:#39424F;vertical-align:top}
+.doc td code,.doc th code{white-space:nowrap}
+.foot{max-width:900px;margin:0 auto 40px;padding:0 24px;color:#7C8698;font-size:13px;
+ font-family:'Space Mono',monospace}
+.foot a{color:#4B45E6;text-decoration:none}
+</style></head><body>
+<nav class="xnav" style="position:sticky;top:0;z-index:50;"><a class="xnav__b" href="index.html">Créez votre agent email</a><a href="index.html">Cours</a><a href="prompts.html">Prompts</a><a href="plan.html">Plan d'action</a><a href="outils.html" class="active">Outils</a><span class="sp"></span><a class="ext" href="https://www.explodev.fr">explodev.fr</a></nav>
+<main class="doc"><h1>OUTILS — Agent Mail 24/7</h1>
+<blockquote>Inventaire complet des outils et dépendances nécessaires<br>Projet : SPEC-agent-mail v6<br>Créé : 2026-07-06</blockquote>
+<hr>
+<h2>1. Infrastructure (sur serveur-local)</h2>
+<div class='tbl'><table><thead><tr><th>Outil</th><th>Version min</th><th>Rôle</th><th>Installation</th></tr></thead><tbody><tr><td><strong>PostgreSQL</strong></td><td>15+</td><td>Base de données principale</td><td><code>apt install postgresql-15</code></td></tr><tr><td><strong>pgvector</strong></td><td>0.7+</td><td>Recherche vectorielle (embeddings)</td><td><code>apt install postgresql-15-pgvector</code></td></tr><tr><td><strong>postgresql-contrib</strong></td><td>—</td><td>Dictionnaire français <code>tsvector</code></td><td><code>apt install postgresql-contrib</code></td></tr><tr><td><strong>Ollama</strong></td><td>0.4+</td><td>Serveur LLM local + embeddings</td><td><code>curl -fsSL https://ollama.com/install.sh | sh</code></td></tr><tr><td><strong>Firecracker</strong></td><td>1.8+</td><td>Micro-VM pour sandbox</td><td><code>apt install firecracker</code> ou binary release</td></tr><tr><td><strong>KVM</strong></td><td>—</td><td>Virtualisation kernel (prérequis Firecracker)</td><td><code>ls -la /dev/kvm</code> doit exister</td></tr><tr><td><strong>Caddy</strong></td><td>2.8+</td><td>Reverse proxy HTTPS (dashboard)</td><td><code>apt install caddy</code></td></tr><tr><td><strong>Docker</strong></td><td>24+</td><td>Build image conteneur Ollama pour VM</td><td><code>apt install docker.io</code></td></tr><tr><td><strong>Python</strong></td><td>3.11+</td><td>Runtime applicatif</td><td><code>apt install python3.11 python3.11-venv</code></td></tr><tr><td><strong>systemd</strong></td><td>—</td><td>Services daemon + timers</td><td>Présent par défaut</td></tr></tbody></table></div>
+<hr>
+<h2>2. Modèles Ollama</h2>
+<div class='tbl'><table><thead><tr><th>Modèle</th><th>Taille ~</th><th>Rôle</th><th>Commande</th></tr></thead><tbody><tr><td><strong>bge-m3</strong></td><td>~2 Go</td><td>Embeddings multilingues (1024d)</td><td><code>ollama pull bge-m3</code></td></tr><tr><td><strong>LLM classification</strong></td><td>~4-8 Go</td><td>Classification des emails (P1/P2)</td><td><code>ollama pull &lt;modèle&gt;</code></td></tr></tbody></table></div>
+<p><strong>Candidats LLM (à sélectionner) :</strong></p>
+<div class='tbl'><table><thead><tr><th>Modèle</th><th>RAM</th><th>Forces</th><th>Faiblesses</th></tr></thead><tbody><tr><td><code>llama3.1:8b</code></td><td>~6 Go</td><td>Bon français, structured output fiable</td><td>Lent sur CPU</td></tr><tr><td><code>mistral:7b</code></td><td>~5 Go</td><td>Rapide, bon français</td><td>Moins bon en structured output</td></tr><tr><td><code>phi4:14b</code></td><td>~9 Go</td><td>Très bon structured output</td><td>Lourd, français moyen</td></tr><tr><td><code>qwen2.5:7b</code></td><td>~5 Go</td><td>Multilingue natif, rapide</td><td>Moins testé en français</td></tr><tr><td><code>gemma2:9b</code></td><td>~6 Go</td><td>Bon équilibre</td><td>Google, licence restrictive</td></tr></tbody></table></div>
+<hr>
+<h2>3. Python (pip)</h2>
+<pre><code># ── Gmail API ──────────────────────────────────
+google-api-python-client       # Gmail API v1
+google-auth-oauthlib           # OAuth2 flow
+google-auth-httplib2           # Transport HTTP OAuth2
+
+# ── Base de données ────────────────────────────
+psycopg2-binary                # Driver PostgreSQL
+pgvector                       # Extension vectorielle Python
+alembic                        # Migrations DB
+
+# ── Traitement des emails ──────────────────────
+nh3                            # Sanitization HTML (Rust binding)
+pypdf                          # Extraction texte PDF
+
+# ── Dashboard ──────────────────────────────────
+fastapi                        # Framework API REST
+uvicorn                        # Serveur ASGI
+jinja2                         # Templates HTML
+websockets                     # WebSocket temps réel
+
+# ── Utilitaires ────────────────────────────────
+httpx                          # Client HTTP async
+pyyaml                         # Configuration YAML
+pydantic                       # Validation JSON structurée
+
+# ── Tests (dev uniquement) ─────────────────────
+pytest                         # Framework de test
+pytest-asyncio                 # Support async
+httpx                          # Déjà listé, utilisé aussi pour TestClient</code></pre>
+<hr>
+<h2>4. Image VM Alpine (sandbox Firecracker)</h2>
+<div class='tbl'><table><thead><tr><th>Composant</th><th>Rôle</th><th>Source</th></tr></thead><tbody><tr><td><strong>kernel <code>vmlinux.bin</code></strong></td><td>Kernel Linux minimal pour Firecracker</td><td>Alpine Linux ou build custom</td></tr><tr><td><strong>rootfs <code>rootfs.ext4</code></strong></td><td>Système de fichiers minimal (~50 Mo)</td><td>Alpine minirootfs</td></tr><tr><td><strong>Python 3.11</strong></td><td>Exécution <code>sandbox_vm.py</code> dans la VM</td><td>Inclus dans rootfs</td></tr><tr><td><strong>Ollama (conteneur)</strong></td><td>Classification LLM dans la VM, <code>--network=none</code></td><td>Dockerfile dédié</td></tr></tbody></table></div>
+<p>Script de build : <code>./scripts/build_vm_image.sh</code></p>
+<hr>
+<h2>5. Développement (poste local)</h2>
+<div class='tbl'><table><thead><tr><th>Outil</th><th>Rôle</th></tr></thead><tbody><tr><td><strong>git</strong></td><td>Versionnement</td></tr><tr><td><strong>python3.11-venv</strong></td><td>Environnement virtuel isolé</td></tr><tr><td><strong>pytest</strong></td><td>Tests unitaires + E2E</td></tr><tr><td><strong>curl</strong></td><td>Tests manuels API</td></tr><tr><td><strong>psql</strong></td><td>Vérification DB</td></tr><tr><td><strong>ollama</strong></td><td>Test local des modèles</td></tr><tr><td><strong>docker</strong></td><td>Build image conteneur Ollama</td></tr></tbody></table></div>
+<hr>
+<h2>6. Credentials &amp; Config</h2>
+<div class='tbl'><table><thead><tr><th>Fichier</th><th>Rôle</th><th>Stockage</th></tr></thead><tbody><tr><td><code>gmail-credentials.json</code></td><td>OAuth2 client secret Google Cloud</td><td><code>/home/eddie/email-learner/configs/</code> (gitignored)</td></tr><tr><td><code>token.json</code></td><td>Refresh token OAuth2</td><td>Généré au premier <code>--setup-oauth</code>, gitignored</td></tr><tr><td><code>config.yaml</code></td><td>Configuration applicative</td><td><code>/home/eddie/email-learner/configs/</code></td></tr></tbody></table></div>
+<p><strong>Scope Gmail OAuth2 :</strong> <code>https://www.googleapis.com/auth/gmail.modify</code></p>
+<p>Récupération des credentials : depuis <code>kimi-rag</code> ou <code>sg-rag</code>.</p>
+<hr>
+<h2>7. Accès réseau</h2>
+<div class='tbl'><table><thead><tr><th>Source</th><th>Destination</th><th>Port</th><th>Protocole</th><th>Rôle</th></tr></thead><tbody><tr><td>serveur-local</td><td>Gmail API</td><td>443</td><td>HTTPS</td><td>Sync emails</td></tr><tr><td>serveur-local</td><td>accounts.google.com</td><td>443</td><td>HTTPS</td><td>OAuth2 refresh</td></tr><tr><td>LAN (10.0.0.x)</td><td>serveur-local</td><td>8080</td><td>HTTPS</td><td>Dashboard</td></tr><tr><td>serveur-local (localhost)</td><td>serveur-local</td><td>5432</td><td>PostgreSQL</td><td>DB</td></tr><tr><td>serveur-local (localhost)</td><td>serveur-local</td><td>11434</td><td>HTTP</td><td>Ollama API</td></tr></tbody></table></div>
+<p><strong>Pas de règle NAT/port forwarding vers internet pour le dashboard.</strong></p>
+<hr>
+<h2>8. Services systemd</h2>
+<div class='tbl'><table><thead><tr><th>Service</th><th>Rôle</th></tr></thead><tbody><tr><td><code>email-learner.service</code></td><td>Daemon principal (observer + ingester + embedder)</td></tr><tr><td><code>email-learner-worker.service</code></td><td>Worker action_queue → Gmail API</td></tr><tr><td><code>email-learner-backup.timer</code></td><td>pg_dump quotidien</td></tr><tr><td><code>email-learner-train.timer</code></td><td>Fine-tune QLoRA nocturne (P2)</td></tr></tbody></table></div>
+<hr>
+<h2>9. Vérifications pré-déploiement</h2>
+<pre><code># 1. PostgreSQL
+psql -h 10.0.0.xxx -U email_learner_app -d email_learner -c &quot;SELECT 1;&quot;
+
+# 2. pgvector
+psql -h 10.0.0.xxx -U email_learner_app -d email_learner -c &quot;SELECT &#x27;[1,2,3]&#x27;::vector;&quot;
+
+# 3. Dictionnaire français
+psql -h 10.0.0.xxx -U email_learner_app -d email_learner -c &quot;SELECT to_tsvector(&#x27;french&#x27;, &#x27;échéance facture&#x27;);&quot;
+
+# 4. Ollama
+curl -s http://10.0.0.xx:11xx/api/tags | python3 -c &quot;import sys,json; print([t[&#x27;name&#x27;] for t in json.load(sys.stdin)[&#x27;models&#x27;]])&quot;
+
+# 5. KVM
+ls -la /dev/kvm &amp;&amp; echo &quot;KVM OK&quot; || echo &quot;KVM ABSENT — sandbox VM indisponible&quot;
+
+# 6. Firecracker
+firecracker --version
+
+# 7. Caddy
+caddy version
+
+# 8. RAM disponible
+free -h | grep Mem</code></pre>
+<hr>
+<h2>10. Budget disque estimé</h2>
+<div class='tbl'><table><thead><tr><th>Élément</th><th>Espace</th></tr></thead><tbody><tr><td>Code source + venv</td><td>~500 Mo</td></tr><tr><td>Modèles Ollama (bge-m3 + LLM)</td><td>~10 Go</td></tr><tr><td>PostgreSQL (2000 emails + embeddings)</td><td>~2 Go</td></tr><tr><td>Logs (30 jours)</td><td>~500 Mo</td></tr><tr><td>Image VM Alpine + kernel</td><td>~100 Mo</td></tr><tr><td>Backups (7j local)</td><td>~5 Go</td></tr><tr><td><strong>Total</strong></td><td><strong>~18 Go</strong></td></tr></tbody></table></div></main>
+<footer class="foot">Ressource du projet Agent Mail 24/7 · IP et hostnames anonymisés · <a href="https://www.explodev.fr">www.explodev.fr</a></footer>
+</body></html>

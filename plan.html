@@ -1,0 +1,246 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plan d'action — Agent Mail 24/7</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#EAEDEF;color:#1B222C;font-family:'Inter',system-ui,sans-serif;line-height:1.65}
+
+.xnav{display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:#0E141B;color:#CBD5E2;
+ padding:10px 20px;font-family:'Space Mono',ui-monospace,SFMono-Regular,monospace;font-size:13px}
+.xnav .xnav__b{font-family:'Bricolage Grotesque','Space Grotesk',Inter,sans-serif;font-weight:700;
+ color:#fff;font-size:15.5px;letter-spacing:-.01em;margin-right:14px;text-decoration:none}
+.xnav a{color:#9BA7BA;text-decoration:none;padding:6px 11px;border-radius:7px;transition:.15s}
+.xnav a:hover{color:#fff;background:rgba(255,255,255,.09)}
+.xnav a.active{color:#fff;background:#4B45E6}
+.xnav .sp{flex:1 1 auto}
+.xnav a.ext{color:#8F8CF7}
+
+.doc{max-width:900px;margin:26px auto;background:#fff;border:1px solid #DBDFE4;border-radius:16px;
+ box-shadow:0 30px 60px -44px rgba(20,28,44,.35);padding:44px clamp(20px,5vw,56px) 60px}
+.doc h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(1.9rem,4vw,2.6rem);
+ letter-spacing:-.025em;line-height:1.05;margin:8px 0 18px}
+.doc h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.02em;
+ margin:38px 0 12px;padding-top:20px;border-top:1px solid #EBEEF1}
+.doc h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:1.18rem;margin:26px 0 8px}
+.doc h4{font-weight:700;font-size:1rem;margin:20px 0 6px;color:#3A4353}
+.doc p{margin:0 0 14px;color:#38414F}
+.doc a{color:#4B45E6;text-decoration:none} .doc a:hover{text-decoration:underline}
+.doc strong{color:#141A22;font-weight:600}
+.doc ul,.doc ol{margin:0 0 16px;padding-left:24px} .doc li{margin:5px 0;color:#38414F}
+.doc code{font-family:'Space Mono',ui-monospace,monospace;font-size:.86em;background:#EEF0F3;
+ color:#3A2FC9;padding:1.5px 6px;border-radius:5px}
+.doc pre{background:#0E141B;color:#D7DEE8;border-radius:12px;padding:16px 18px;overflow-x:auto;margin:0 0 18px}
+.doc pre code{background:none;color:inherit;padding:0;font-size:12.6px;line-height:1.7}
+.doc blockquote{border-left:3px solid #4B45E6;background:#F6F5FE;margin:0 0 18px;padding:12px 18px;
+ border-radius:0 10px 10px 0;color:#4A5464;font-size:.96rem}
+.doc hr{border:0;border-top:1px solid #E4E8EE;margin:26px 0}
+.tbl{overflow-x:auto;margin:0 0 20px}
+.doc table{border-collapse:collapse;width:100%;font-size:14px}
+.doc th{background:#F1F0FC;color:#2A2270;text-align:left;font-weight:600;padding:9px 12px;border:1px solid #E1E4EA}
+.doc td{padding:9px 12px;border:1px solid #EBEEF1;color:#39424F;vertical-align:top}
+.doc td code,.doc th code{white-space:nowrap}
+.foot{max-width:900px;margin:0 auto 40px;padding:0 24px;color:#7C8698;font-size:13px;
+ font-family:'Space Mono',monospace}
+.foot a{color:#4B45E6;text-decoration:none}
+</style></head><body>
+<nav class="xnav" style="position:sticky;top:0;z-index:50;"><a class="xnav__b" href="index.html">Créez votre agent email</a><a href="index.html">Cours</a><a href="prompts.html">Prompts</a><a href="plan.html" class="active">Plan d'action</a><a href="outils.html">Outils</a><span class="sp"></span><a class="ext" href="https://www.explodev.fr">explodev.fr</a></nav>
+<main class="doc"><h1>PLAN DE TRAVAIL — Agent Mail 24/7</h1>
+<blockquote>Orchestration par subagents — qui fait quoi, dans quel ordre, avec quelles dépendances<br>Projet : email-learner<br>Spec : SPEC-agent-mail v6<br>Créé : 2026-07-06</blockquote>
+<hr>
+<h2>Subagents</h2>
+<div class='tbl'><table><thead><tr><th>#</th><th>Agent</th><th>Rôle</th><th>Phase</th><th>Dépendances</th></tr></thead><tbody><tr><td>1</td><td><code>db-architect</code></td><td>PostgreSQL : user, schéma, migrations, indexes, triggers</td><td>P0</td><td>Aucune</td></tr><tr><td>2</td><td><code>gmail-sync</code></td><td>OAuth, observer, historyId, sync delta, circuit-breaker</td><td>P0</td><td><code>db-architect</code> (tables)</td></tr><tr><td>3</td><td><code>sandbox-vm</code></td><td>Firecracker VM + conteneur Ollama <code>--network=none</code> + pool</td><td>P0</td><td>Aucune (testable isolément)</td></tr><tr><td>4</td><td><code>parser-sanitizer</code></td><td>Parsing MIME, nh3, extraction PDF, détection actions</td><td>P0</td><td><code>gmail-sync</code> (emails bruts)</td></tr><tr><td>5</td><td><code>embedder</code></td><td>bge-m3 via Ollama, pgvector, index IVFFlat</td><td>P0</td><td><code>db-architect</code> + <code>parser-sanitizer</code></td></tr><tr><td>6</td><td><code>rules-engine</code></td><td>Règles statiques, KNOWN_LOW_PRIORITY_DOMAINS auto</td><td>P0</td><td><code>db-architect</code></td></tr><tr><td>7</td><td><code>dashboard-core</code></td><td>FastAPI, Caddy HTTPS, <code>/api/health</code>, pages statiques</td><td>P0</td><td>Aucune (sert des pages vides au début)</td></tr><tr><td>8</td><td><code>recommender</code></td><td>P1 : cascade RRF, Few-Shot, Pydantic, confiance hybride</td><td>P1</td><td><code>embedder</code> + <code>rules-engine</code></td></tr><tr><td>9</td><td><code>dashboard-p1</code></td><td>Pages décisions, Approuver/Rejeter, recherche hybride</td><td>P1</td><td><code>dashboard-core</code> + <code>recommender</code></td></tr><tr><td>10</td><td><code>action-worker</code></td><td>Queue idempotente → Gmail API (modify labels)</td><td>P2</td><td><code>gmail-sync</code> + <code>db-architect</code></td></tr><tr><td>11</td><td><code>decider</code></td><td>P2 autonome : seuils par action, garde-fous, mode vacances</td><td>P2</td><td><code>recommender</code> + <code>action-worker</code></td></tr><tr><td>12</td><td><code>dashboard-p2</code></td><td>Stats, learning, config, kill-switch</td><td>P2</td><td><code>dashboard-p1</code> + <code>decider</code></td></tr><tr><td>13</td><td><code>tester</code></td><td>Tests unitaires, adversariaux, E2E</td><td>Toutes</td><td>Tous les agents (exécuté après chaque)</td></tr><tr><td>14</td><td><code>devops</code></td><td>systemd, Caddy, backups, restore test, runbook</td><td>Toutes</td><td>Tous les agents (final)</td></tr></tbody></table></div>
+<hr>
+<h2>1. db-architect</h2>
+<p><strong>Rôle</strong> : Créer la base de données PostgreSQL et toutes les tables.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Créer l&#x27;utilisateur <code>email_learner_app</code> (non-superuser, hostssl)</li><li>Créer la base <code>email_learner</code></li><li>Installer <code>postgresql-contrib</code> (dictionnaire français)</li><li>Exécuter le schéma complet : 9 tables, 2 triggers, 10 index</li><li>Générer la migration Alembic initiale</li><li>Écrire <code>src/config.py</code> (connexion DB)</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>alembic/versions/001_initial_schema.py</code></li><li><code>src/config.py</code></li><li>Base connectable : <code>psql -h 10.0.0.xxx -U email_learner_app -d email_learner</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>SELECT table_name FROM information_schema.tables WHERE table_schema=&#x27;public&#x27;;
+-- Doit lister : emails, email_actions, email_embeddings, sync_state,
+--               action_queue, gmail_labels, decision_journal,
+--               learning_metrics, sandbox_alerts
+SELECT to_tsvector(&#x27;french&#x27;, &#x27;échéance facture&#x27;);
+-- Doit retourner un tsvector</code></pre>
+<hr>
+<h2>2. gmail-sync</h2>
+<p><strong>Rôle</strong> : Connecter Gmail API, récupérer les emails, gérer le delta.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/gmail_client.py</code> (wrapper avec allowlist, interdictions delete/send)</li><li>Écrire <code>src/observer.py</code> (polling history.list + circuit-breaker)</li><li>Implémenter OAuth2 (scope <code>gmail.modify</code>)</li><li>Sync initiale : <code>messages.list(q=&#x27;newer_than:6m&#x27;)</code></li><li>Sync delta : <code>history.list(startHistoryId=...)</code></li><li>Fallback full-resync sur 404 historyId</li><li>Gestion codes erreur (429, 401, 403, 500, 503)</li><li>Stocker <code>gmail_labels</code> (pas de hardcode)</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/gmail_client.py</code></li><li><code>src/observer.py</code></li><li><code>configs/gmail-credentials.json</code> (gitignored)</li><li><code>configs/token.json</code> (gitignored, généré)</li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m src.main --sync-once --max 10
+# → 10 emails dans la table emails
+psql -c &quot;SELECT COUNT(*) FROM emails;&quot;</code></pre>
+<hr>
+<h2>3. sandbox-vm</h2>
+<p><strong>Rôle</strong> : Micro-VM Firecracker jetable avec conteneur Ollama isolé.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>scripts/build_vm_image.sh</code> (Alpine + Python + conteneur Ollama)</li><li>Écrire <code>src/sandbox.py</code> (orchestrateur : pré-filtre + pool VMs)</li><li>Écrire <code>src/sandbox_vm.py</code> (agent dans la VM : prompt → Ollama → validation)</li><li>Pool de 3-5 VMs pré-chauffées</li><li>Détection anomalies : timeout, JSON invalide, appels système suspects</li><li>Fallback Docker <code>--network=none</code> si pas de KVM</li><li>Table <code>sandbox_alerts</code> + WebSocket push au dashboard</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>scripts/build_vm_image.sh</code></li><li><code>src/sandbox.py</code></li><li><code>src/sandbox_vm.py</code></li><li><code>/opt/email-learner/vm/vmlinux.bin</code></li><li><code>/opt/email-learner/vm/rootfs.ext4</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>./scripts/build_vm_image.sh
+python -c &quot;from src.sandbox import VMPool; p=VMPool(); vm=p.acquire(); r=vm.classify(&#x27;test&#x27;); p.release(vm); print(r)&quot;
+# → JSON valide avec classification &quot;unknown&quot;</code></pre>
+<hr>
+<h2>4. parser-sanitizer</h2>
+<p><strong>Rôle</strong> : Transformer un email brut Gmail en données propres et structurées.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/parser.py</code> : headers, nh3 HTML→texte, body_snippet</li><li>Écrire <code>src/attachment_parser.py</code> : extraction PDF via pypdf</li><li>Écrire <code>src/ingester.py</code> : UPSERT idempotent dans PostgreSQL</li><li>Écrire <code>src/action_detector.py</code> : détection actions par delta labels</li><li>Tests adversariaux (CSS caché, Unicode invisible, etc.)</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/parser.py</code></li><li><code>src/attachment_parser.py</code></li><li><code>src/ingester.py</code></li><li><code>src/action_detector.py</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m pytest tests/test_anti_injection.py -v
+# → Tous les tests passent
+python -m pytest tests/test_ingester.py -v
+# → UPSERT idempotent vérifié</code></pre>
+<hr>
+<h2>5. embedder</h2>
+<p><strong>Rôle</strong> : Générer les embeddings bge-m3 et les stocker dans pgvector.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/embedder.py</code> (batch processing via Ollama)</li><li>Contenu de l&#x27;embedding : subject + body_snippet + sender_email + sender_domain + attachment_text</li><li>Index IVFFlat cosine (100 listes)</li><li>Retry si Ollama timeout</li><li>Queue d&#x27;embedding (emails sans embedding)</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/embedder.py</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m src.main --embed 100
+psql -c &quot;SELECT COUNT(*) FROM email_embeddings;&quot;
+# → 100
+psql -c &quot;SELECT vector_dims(embedding) FROM email_embeddings LIMIT 1;&quot;
+# → 1024</code></pre>
+<hr>
+<h2>6. rules-engine</h2>
+<p><strong>Rôle</strong> : Règles statiques de classification (cold start + fallback).</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/rules_engine.py</code> : 6 règles + CRITICAL_KEYWORDS</li><li>Système d&#x27;apprentissage automatique de <code>KNOWN_LOW_PRIORITY_DOMAINS</code></li><li>Recalcul nocturne (cron ou scheduler interne)</li><li>Retrait immédiat si comportement utilisateur change</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/rules_engine.py</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m pytest tests/test_rules_engine.py -v
+# → Chaque règle testée avec cas positifs et négatifs</code></pre>
+<hr>
+<h2>7. dashboard-core</h2>
+<p><strong>Rôle</strong> : Dashboard HTTPS minimal (santé système, pages vides).</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/dashboard.py</code> (FastAPI, bind 10.0.0.xxx:0000)</li><li>Écrire <code>src/health.py</code> (endpoints + checks)</li><li>Configurer Caddy (HTTPS local sur :8080 → :8000)</li><li>Pages HTML statiques (vides, remplies par dashboard-p1/p2)</li><li>WebSocket (connexion simple, sans auth)</li><li>CSP restrictif</li><li>Pas d&#x27;authentification</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/dashboard.py</code></li><li><code>src/health.py</code></li><li><code>static/index.html</code> (minimal, santé système)</li><li><code>static/style.css</code></li><li><code>static/app.js</code> (WebSocket reconnect)</li><li>Configuration Caddy</li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>curl -k https://10.0.0.xxx:8080/api/health | python3 -m json.tool
+# → JSON avec tous les champs health</code></pre>
+<hr>
+<h2>8. recommender</h2>
+<p><strong>Rôle</strong> : Classification P1 — Few-Shot RAG dynamique.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/search.py</code> (recherche hybride RRF)</li><li>Écrire <code>src/recommender.py</code> : cascade sender→domaine→global</li><li>Prompt Few-Shot sécurisé (§6.6 de la spec)</li><li>Appel Ollama avec <code>format=MailDecision.model_json_schema()</code></li><li>Validation Pydantic <code>extra=forbid</code></li><li>Confiance hybride (dashboard uniquement, pas décisionnel)</li><li>Détection divergence LLM/heuristique → forcer P1</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/search.py</code></li><li><code>src/recommender.py</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m pytest tests/test_recommender.py -v
+# → Classification correcte sur jeu de test</code></pre>
+<hr>
+<h2>9. dashboard-p1</h2>
+<p><strong>Rôle</strong> : Interface P1 complète (décisions, recherche).</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Pages <code>/decisions</code> : tableau + boutons Approuver/Rejeter</li><li>Page <code>/mails</code> : recherche hybride (full-text + sémantique)</li><li>Page <code>/config</code> : sliders, toggles</li><li>Intégration WebSocket pour mise à jour temps réel</li><li>Échappement HTML systématique des contenus mail</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>static/decisions.html</code></li><li><code>static/mails.html</code></li><li><code>static/config.html</code></li><li>Mise à jour <code>src/dashboard.py</code> (endpoints P1)</li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>curl -k https://10.0.0.xxx:8080/api/emails/search?q=facture
+# → Résultats pertinents</code></pre>
+<hr>
+<h2>10. action-worker</h2>
+<p><strong>Rôle</strong> : Exécuter les actions Gmail API via la queue idempotente.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/action_worker.py</code> : consommer action_queue</li><li>Idempotence : clé unique, pas de double exécution</li><li>Actions autorisées : mark_read, archive, star, move_ia_review</li><li>Interdictions vérifiées : pas de delete, send, transfer</li><li>Retry avec backoff, max 3 tentatives</li><li>Service systemd dédié</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/action_worker.py</code></li><li><code>systemd/email-learner-worker.service</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m pytest tests/test_action_worker.py -v
+# → Queue consommée, idempotence vérifiée
+python -m pytest tests/test_gmail_client.py -v
+# → Aucune méthode interdite appelée</code></pre>
+<hr>
+<h2>11. decider</h2>
+<p><strong>Rôle</strong> : Décisions autonomes P2 avec garde-fous.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Écrire <code>src/decider.py</code></li><li>Fenêtre glissante 100 dernières décisions</li><li>Seuils par action : archive≥95%, mark_read≥90%, star≥85%, move_ia_review≥80%</li><li>Garde-fous : jamais auto-archive si mots-clés critiques</li><li>Divergence LLM/heuristique&gt;0.3 → forcer P1</li><li>Kill-switch dashboard → repasse P1</li><li>Mode Vacances : P2 désactivé</li><li>Quota quotidien max 20 actions/jour</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>src/decider.py</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m pytest tests/test_decider.py -v  # (à créer par tester)
+# → Seuils respectés, kill-switch fonctionnel</code></pre>
+<hr>
+<h2>12. dashboard-p2</h2>
+<p><strong>Rôle</strong> : Pages statistiques et apprentissage.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Page <code>/stats</code> : camembert, barres, top expéditeurs, heatmap</li><li>Page <code>/learning</code> : courbes précision, progression P2</li><li>Graphiques Chart.js</li><li>Kill-switch P2 + Mode Vacances (visuel)</li><li>Export JSON complet</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>static/stats.html</code></li><li><code>static/learning.html</code></li><li>Mise à jour <code>src/dashboard.py</code> (endpoints P2)</li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>curl -k https://10.0.0.xxx:8080/api/stats | python3 -m json.tool
+# → Données agrégées</code></pre>
+<hr>
+<h2>13. tester</h2>
+<p><strong>Rôle</strong> : Tests unitaires, adversariaux, E2E pour tous les agents.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li><code>test_observer.py</code> : mock Gmail API</li><li><code>test_sandbox.py</code> : injection, prompt cache, timeout, escape VM</li><li><code>test_ingester.py</code> : UPSERT idempotent</li><li><code>test_rules_engine.py</code> : règles statiques</li><li><code>test_recommender.py</code> : classification P1</li><li><code>test_gmail_client.py</code> : interdictions delete/send</li><li><code>test_anti_injection.py</code> : 7 cas adversariaux</li><li><code>test_action_worker.py</code> : queue idempotente</li><li><code>test_e2e.py</code> : mock Gmail → ingestion → embedding → décision → dashboard</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li>9 fichiers de test</li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>python -m pytest tests/ -v --cov=src --cov-report=term
+# → 100% tests passent, coverage ≥ 80%</code></pre>
+<hr>
+<h2>14. devops</h2>
+<p><strong>Rôle</strong> : Déploiement, services, backups, monitoring.</p>
+<p><strong>Tâches</strong> :</p>
+<ul><li>Services systemd : <code>email-learner.service</code>, <code>email-learner-worker.service</code></li><li>Timers : <code>email-learner-backup.timer</code> (pg_dump quotidien), <code>email-learner-train.timer</code></li><li>Script <code>restore_test.sh</code> (test restauration backup automatisé)</li><li>Configuration Caddy (reverse proxy HTTPS)</li><li>Vérifications pré-déploiement (liste section 9 de OUTILS-agent-mail.md)</li></ul>
+<p><strong>Livrables</strong> :</p>
+<ul><li><code>systemd/email-learner.service</code></li><li><code>systemd/email-learner-worker.service</code></li><li><code>systemd/email-learner-backup.timer</code></li><li><code>systemd/email-learner-train.timer</code></li><li><code>scripts/restore_test.sh</code></li></ul>
+<p><strong>Validation</strong> :</p>
+<pre><code>sudo systemctl start email-learner
+sudo systemctl status email-learner
+# → active (running)
+./scripts/restore_test.sh
+# → &quot;Restauration OK : 1850 rows (attendu ≥ 1831)&quot;</code></pre>
+<hr>
+<h2>Ordre d&#x27;exécution</h2>
+<pre><code>P0 ─────────────────────────────────────────────────────────────────────
+│
+├─ 1. db-architect        → tables, indexes, migrations
+├─ 2. dashboard-core      → santé système visible pendant le reste
+├─ 3. gmail-sync          → emails dans la base
+├─ 4. parser-sanitizer    → nettoyage + actions
+├─ 5. sandbox-vm          → VM Firecracker prête
+├─ 6. embedder            → vecteurs bge-m3
+├─ 7. rules-engine        → règles statiques
+│
+├─ 13. tester             → tests P0 (exécuté après chaque agent)
+│
+P1 ─────────────────────────────────────────────────────────────────────
+│
+├─ 8. recommender         → classification Few-Shot
+├─ 9. dashboard-p1        → interface Approuver/Rejeter
+│
+├─ 13. tester             → tests P1
+│
+P2 ─────────────────────────────────────────────────────────────────────
+│
+├─ 10. action-worker      → queue → Gmail API
+├─ 11. decider            → autonomie + garde-fous
+├─ 12. dashboard-p2       → stats + learning
+│
+├─ 13. tester             → tests P2 + E2E
+│
+FINAL ───────────────────────────────────────────────────────────────────
+│
+└─ 14. devops             → systemd, Caddy, backups, runbook</code></pre>
+<hr>
+<h2>Règles de collaboration entre agents</h2>
+<ol><li><strong>Chaque agent travaille dans son périmètre.</strong> Ne pas toucher aux fichiers d&#x27;un autre agent sans nécessité explicite.</li><li><strong>Les dépendances sont strictes.</strong> Un agent ne peut pas commencer tant que ses dépendances ne sont pas validées.</li><li><strong>Un agent = un prompt.</strong> Le prompt contient : la spec de l&#x27;agent, ses dépendances, les livrables attendus, les critères de validation.</li><li><strong>Validation après chaque agent.</strong> Le <code>tester</code> exécute les tests spécifiques à l&#x27;agent avant de passer au suivant.</li><li><strong>Communication via la base de données.</strong> Les agents ne partagent pas de fichiers intermédiaires. Tout passe par PostgreSQL.</li></ol></main>
+<footer class="foot">Ressource du projet Agent Mail 24/7 · IP et hostnames anonymisés · <a href="https://www.explodev.fr">www.explodev.fr</a></footer>
+</body></html>
