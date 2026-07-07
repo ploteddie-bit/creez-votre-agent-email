@@ -519,6 +519,152 @@ details .det-body{padding:0 18px 6px}
     <span class="hchip"><b>3</b>&nbsp;phases d'autonomie</span>
   </div>
 </section>
+<!-- TABBED HEADER — AUDIO + RESSOURCES -->
+<style>
+  .res-tabs{max-width:820px;margin:0 auto 32px}
+  .res-tabs__bar{display:flex;gap:4px;margin-bottom:0;border-bottom:2px solid var(--line,#D6DBE4);padding:0 0 0 4px}
+  .res-tabs__btn{padding:10px 16px;background:transparent;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;font:inherit;font-size:.88rem;font-weight:600;cursor:pointer;color:var(--ink-3,#7C889A);transition:all .15s}
+  .res-tabs__btn:hover{color:var(--accent,#3E3AE6);background:var(--accent-soft,#ECECFD)}
+  .res-tabs__btn.on{color:var(--accent,#3E3AE6);background:var(--surface,#fff);border-color:var(--line,#D6DBE4);border-bottom:2px solid var(--surface,#fff);margin-bottom:-2px;position:relative;z-index:1}
+  .res-tabs__panel{display:none;padding:20px 0 0}
+  .res-tabs__panel.on{display:block}
+  .res-tabs .ap-box{margin:0;padding:.9rem 1.1rem;border:1px solid rgba(14,165,233,.35);border-radius:12px;background:rgba(14,165,233,.06);font-size:.92rem;line-height:1.4}
+  .res-tabs .ap-head{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.55rem}
+  .res-tabs .ap-label{font-weight:600}
+  .res-tabs .ap-dur{opacity:.7;font-weight:400}
+  .res-tabs .ap-speed{margin-left:auto;display:flex;gap:.3rem}
+  .res-tabs .ap-speed button{border:1px solid rgba(14,165,233,.45);background:transparent;color:inherit;border-radius:6px;padding:.15rem .5rem;font:inherit;font-size:.8rem;cursor:pointer}
+  .res-tabs .ap-speed button.ap-on{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
+  .res-tabs .ap-box audio{width:100%;display:block}
+  .res-tabs .ap-credit{margin:.5rem 0 0;font-size:.78rem;opacity:.65}
+  .res-tabs .dl-link{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:8px 16px;background:var(--accent,#3E3AE6);color:#fff;border-radius:8px;text-decoration:none;font-weight:600;font-size:.88rem;transition:opacity .15s}
+  .res-tabs .dl-link:hover{opacity:.85}
+</style>
+
+<div class="res-tabs">
+  <div class="res-tabs__bar" role="tablist">
+    <button class="res-tabs__btn on" role="tab" data-tab="cours" aria-selected="true">🎧 Le Cours</button>
+    <button class="res-tabs__btn" role="tab" data-tab="prompts">📝 Prompts</button>
+    <button class="res-tabs__btn" role="tab" data-tab="outils">🔧 Outils</button>
+    <button class="res-tabs__btn" role="tab" data-tab="plan">📋 Plan de travail</button>
+  </div>
+
+  <!-- PANEL : LE COURS -->
+  <div class="res-tabs__panel on" role="tabpanel" data-panel="cours">
+    <div class="ap-box">
+      <div class="ap-head">
+        <span aria-hidden="true">🎧</span>
+        <span class="ap-label">Écouter ce cours <span class="ap-dur">(51 min)</span></span>
+        <span class="ap-speed" role="group" aria-label="Vitesse de lecture">
+          <button type="button" class="ap-on" data-s="1">1×</button>
+          <button type="button" data-s="1.25">1,25×</button>
+          <button type="button" data-s="1.5">1,5×</button>
+        </span>
+      </div>
+      <audio controls preload="none" src="cours-agent-mail.mp3">
+        Votre navigateur ne permet pas la lecture audio.
+      </audio>
+      <p class="ap-credit">Version audio générée par Edge TTS (Microsoft Neural). Les exemples de code et tableaux sont à retrouver sur cette page.</p>
+    </div>
+    <p style="margin:12px 0 0;color:var(--ink-2,#465061);font-size:.92rem">
+      Cours technique complet : architecture, sandbox Firecracker, RAG hybride, 14 subagents, dashboard temps réel. 14 modules interactifs.
+    </p>
+  </div>
+
+  <!-- PANEL : PROMPTS -->
+  <div class="res-tabs__panel" role="tabpanel" data-panel="prompts">
+    <div class="ap-box">
+      <div class="ap-head">
+        <span aria-hidden="true">📝</span>
+        <span class="ap-label">Écouter les prompts <span class="ap-dur">(6 min)</span></span>
+        <span class="ap-speed" role="group" aria-label="Vitesse de lecture">
+          <button type="button" class="ap-on" data-s="1">1×</button>
+          <button type="button" data-s="1.25">1,25×</button>
+          <button type="button" data-s="1.5">1,5×</button>
+        </span>
+      </div>
+      <audio controls preload="none" src="PROMPTS-agent-mail.mp3">
+        Votre navigateur ne permet pas la lecture audio.
+      </audio>
+      <p class="ap-credit">Version audio générée par Edge TTS (Microsoft Neural).</p>
+    </div>
+    <p style="margin:12px 0 0;color:var(--ink-2,#465061);font-size:.92rem">
+      14 prompts de subagents prêts à copier-coller : db-architect, gmail-sync, sandbox-vm, parser-sanitizer, embedder, rules-engine, dashboard-core, recommender, dashboard-p1, action-worker, decider, dashboard-p2, tester, devops.
+    </p>
+    <a href="PROMPTS-agent-mail.md" download class="dl-link" data-track="agent-mail-prompts">📥 Télécharger les prompts (50 Ko)</a>
+  </div>
+
+  <!-- PANEL : OUTILS -->
+  <div class="res-tabs__panel" role="tabpanel" data-panel="outils">
+    <div class="ap-box">
+      <div class="ap-head">
+        <span aria-hidden="true">🔧</span>
+        <span class="ap-label">Écouter les outils <span class="ap-dur">(5 min)</span></span>
+        <span class="ap-speed" role="group" aria-label="Vitesse de lecture">
+          <button type="button" class="ap-on" data-s="1">1×</button>
+          <button type="button" data-s="1.25">1,25×</button>
+          <button type="button" data-s="1.5">1,5×</button>
+        </span>
+      </div>
+      <audio controls preload="none" src="OUTILS-agent-mail.mp3">
+        Votre navigateur ne permet pas la lecture audio.
+      </audio>
+      <p class="ap-credit">Version audio générée par Edge TTS (Microsoft Neural).</p>
+    </div>
+    <p style="margin:12px 0 0;color:var(--ink-2,#465061);font-size:.92rem">
+      Inventaire complet des outils et dépendances : PostgreSQL 15+, pgvector 0.7+, Ollama 0.4+, Firecracker 1.8+, Caddy 2.8+, Docker 24+, Python 3.11+. Modèles Ollama recommandés (bge-m3, llama3.1:8b, mistral:7b).
+    </p>
+    <a href="OUTILS-agent-mail.md" download class="dl-link" data-track="agent-mail-outils">📥 Télécharger les outils (7 Ko)</a>
+  </div>
+
+  <!-- PANEL : PLAN DE TRAVAIL -->
+  <div class="res-tabs__panel" role="tabpanel" data-panel="plan">
+    <div class="ap-box">
+      <div class="ap-head">
+        <span aria-hidden="true">📋</span>
+        <span class="ap-label">Écouter le plan de travail <span class="ap-dur">(14 min)</span></span>
+        <span class="ap-speed" role="group" aria-label="Vitesse de lecture">
+          <button type="button" class="ap-on" data-s="1">1×</button>
+          <button type="button" data-s="1.25">1,25×</button>
+          <button type="button" data-s="1.5">1,5×</button>
+        </span>
+      </div>
+      <audio controls preload="none" src="PLAN-TRAVAIL-agent-mail.mp3">
+        Votre navigateur ne permet pas la lecture audio.
+      </audio>
+      <p class="ap-credit">Version audio générée par Edge TTS (Microsoft Neural).</p>
+    </div>
+    <p style="margin:12px 0 0;color:var(--ink-2,#465061);font-size:.92rem">
+      14 subagents orchestrés avec dépendances : db-architect → gmail-sync → parser → embedder → rules-engine → recommender → decider → action-worker. Chaque agent a son prompt, ses livrables, ses validations.
+    </p>
+    <a href="PLAN-TRAVAIL-agent-mail.md" download class="dl-link" data-track="agent-mail-plan">📥 Télécharger le plan (15 Ko)</a>
+  </div>
+</div>
+
+<script>
+(function() {
+  var tabs = document.querySelectorAll('.res-tabs__btn');
+  var panels = document.querySelectorAll('.res-tabs__panel');
+  tabs.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tabs.forEach(function(t) { t.classList.remove('on'); t.setAttribute('aria-selected','false'); });
+      panels.forEach(function(p) { p.classList.remove('on'); });
+      btn.classList.add('on');
+      btn.setAttribute('aria-selected','true');
+      document.querySelector('[data-panel="'+btn.dataset.tab+'"]').classList.add('on');
+    });
+  });
+  // Speed buttons
+  document.querySelectorAll('.res-tabs .ap-speed button').forEach(function(b) {
+    b.addEventListener('click', function() {
+      var audio = b.closest('.ap-box').querySelector('audio');
+      audio.playbackRate = parseFloat(b.dataset.s);
+      b.closest('.ap-speed').querySelectorAll('button').forEach(function(x){x.classList.remove('ap-on');});
+      b.classList.add('ap-on');
+    });
+  });
+})();
+</script>
 
 <!-- ============ MODULE 0 ============ -->
 <article class="wrap">
