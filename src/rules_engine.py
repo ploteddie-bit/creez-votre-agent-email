@@ -8,6 +8,7 @@ premier mail, sans avoir besoin d'attendre un modèle entraîné.
 Règles :
   1. noreply + domaine low-priority + pas de mot-clé critique → archive (high)
   2. noreply + mot-clé critique → move_ia_review (critical)
+  2b. PJ jamais classifiée par l'utilisateur → move_ia_review (critical, ABSOLUE)
   3. noreply + domaine inconnu → P1 (medium)
   4. Mot-clé critique présent → move_ia_review (critical)
   5. Label spam → mark_read (high)
@@ -127,6 +128,19 @@ class RulesEngine:
                 confidence=RuleConfidence.CRITICAL,
                 rule_name="critical_keyword" if not is_noreply else "noreply_with_critical",
                 matched_keywords=matched_keywords,
+                sender_domain=sender_domain,
+            )
+
+        # Règle 2b (REVIEW §1.2 — sécurité, ABSOLUE) : pièce jointe
+        # jamais classifiée par l'utilisateur → move_ia_review.
+        # Aucune PJ non encore vue ne peut être auto-classifiée :
+        # un PDF scanné de facture ne doit JAMAIS finir auto-archivé.
+        if email.get("has_attachments") and not email.get("user_classified"):
+            return RuleResult(
+                action=RuleAction.MOVE_IA_REVIEW,
+                confidence=RuleConfidence.CRITICAL,
+                rule_name="unclassified_attachment",
+                matched_keywords=[],
                 sender_domain=sender_domain,
             )
 

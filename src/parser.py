@@ -171,10 +171,12 @@ def check_injection_patterns(text: str) -> list[str]:
 # ============================================================
 
 def decode_base64url(data: str) -> str:
-    """Décode une chaîne base64url (format Gmail) en texte brut.
+    """Décode une chaîne base64url (format Gmail) en texte.
 
     Gmail utilise le base64 URL-safe avec padding optionnel.
-    On gère les erreurs de décodage en retournant une chaîne vide.
+    En cas d'erreur de décodage base64, retourne une chaîne vide.
+    Le décodage bytes → texte est délégué à `decode_bytes_smart`
+    (gestion des vieux encodages ISO-8859-1 / Windows-1252).
     """
     if not data:
         return ""
@@ -183,10 +185,38 @@ def decode_base64url(data: str) -> str:
         padded = data + "=" * (-len(data) % 4)
         # URL-safe alphabet
         decoded = base64.urlsafe_b64decode(padded)
-        return decoded.decode("utf-8", errors="replace")
     except Exception as e:
         logger.debug("base64url decode failed: %s", e)
         return ""
+    return decode_bytes_smart(decoded)
+
+
+def decode_bytes_smart(raw: bytes) -> str:
+    """Décode des bytes en texte avec détection d'encodage (REVIEW §1.3).
+
+    Stratégie :
+      1. UTF-8 strict — le cas nominal moderne.
+      2. `chardet.detect()` si UTF-8 échoue et confiance >= 0.7
+         (vieux mails français en ISO-8859-1 / Windows-1252).
+      3. Fallback UTF-8 avec remplacement — jamais d'exception,
+         jamais de crash du pipeline sur un mail mal encodé.
+    """
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        import chardet  # lazy import
+
+        guess = chardet.detect(raw)
+        encoding = guess.get("encoding")
+        confidence = guess.get("confidence") or 0.0
+        if encoding and confidence >= 0.7:
+            logger.debug("encoding detected: %s (%.2f)", encoding, confidence)
+            return raw.decode(encoding, errors="replace")
+    except Exception as e:
+        logger.debug("chardet detection failed: %s", e)
+    return raw.decode("utf-8", errors="replace")
 
 
 def extract_text_from_payload(payload: dict) -> tuple[str, str]:
@@ -340,8 +370,7 @@ def parse_raw_message(raw: dict, *, snippet_max_len: int = 500) -> dict:
         "body_text": body_text or None,
         "body_snippet": body_snippet,
         "body_html": body_html or None,  # archivage seul, jamais affiché
-        "has_attachments": "has_attachments"  # simplification, à enrichir
-            or bool(payload.get("parts")),
+        "has_attachments": bool(payload.get("parts")),
         "attachment_text": None,  # extrait séparément par attachment_parser
         "date_received": date_received,
         "labels": label_ids,

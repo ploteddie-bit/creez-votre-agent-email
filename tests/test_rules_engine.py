@@ -220,3 +220,62 @@ def test_remove_unknown_domain_is_noop() -> None:
     engine.remove_low_priority_domain("never-added.com")
     # Ne lève pas, no-op silencieux
     assert "never-added.com" not in engine.known_low_priority_domains
+
+
+# ============================================================
+# Règle 2b : PJ non classifiée → move_ia_review (B2, REVIEW §1.2)
+# ============================================================
+
+def _email_with_attachment(**overrides) -> dict:
+    """Email type avec pièce jointe, sans mot-clé critique."""
+    base = {
+        "sender_email": "noreply@vendor.com",
+        "sender_domain": "vendor.com",
+        "subject": "Votre document",
+        "body_text": "Veuillez trouver ci-joint votre document.",
+        "labels": ["INBOX"],
+        "has_attachments": True,
+        "user_classified": False,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_unclassified_attachment_goes_to_review() -> None:
+    """Une PJ jamais classifiée → move_ia_review, jamais d'auto-archive."""
+    engine = RulesEngine()
+    result = engine.classify(_email_with_attachment())
+    assert result.action is RuleAction.MOVE_IA_REVIEW
+    assert result.confidence is RuleConfidence.CRITICAL
+    assert result.rule_name == "unclassified_attachment"
+
+
+def test_attachment_rule_beats_low_priority_archive() -> None:
+    """Même un domaine low-priority connu n'auto-archive pas une PJ inconnue."""
+    engine = RulesEngine()
+    engine.add_low_priority_domain("vendor.com")
+    result = engine.classify(_email_with_attachment())
+    assert result.action is RuleAction.MOVE_IA_REVIEW
+    assert result.rule_name == "unclassified_attachment"
+
+
+def test_attachment_rule_absolue_sans_mot_cle() -> None:
+    """Le cas du REVIEW : sujet neutre 'Votre document' + PDF → revue."""
+    engine = RulesEngine()
+    result = engine.classify(_email_with_attachment(subject="Votre document"))
+    assert result.action is RuleAction.MOVE_IA_REVIEW
+
+
+def test_user_classified_attachment_not_caught() -> None:
+    """Une PJ DÉJÀ classifiée par l'utilisateur n'est plus interceptée."""
+    engine = RulesEngine()
+    engine.add_low_priority_domain("vendor.com")
+    result = engine.classify(_email_with_attachment(user_classified=True))
+    assert result.rule_name != "unclassified_attachment"
+
+
+def test_no_attachment_not_caught() -> None:
+    """Sans PJ, la règle ne s'applique pas."""
+    engine = RulesEngine()
+    result = engine.classify(_email_with_attachment(has_attachments=False))
+    assert result.rule_name != "unclassified_attachment"
