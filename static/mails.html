@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emails — Agent Mail 24/7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+<nav class="xnav">
+  <a class="xnav__brand" href="/" data-route="/">Agent Mail</a>
+  <a href="/mails" data-route="/mails">Emails</a>
+  <a href="/decisions" data-route="/decisions">Décisions</a>
+  <a href="/stats" data-route="/stats">Stats</a>
+  <a href="/learning" data-route="/learning">Apprentissage</a>
+  <a href="/config" data-route="/config">Config</a>
+  <span class="xnav__spacer"></span>
+  <a href="/api/health" class="xnav__meta">/api/health</a>
+  <a href="/cours" data-route="/cours">Cours</a>
+</nav>
+
+<main>
+  <div class="pagehead">
+    <div>
+      <h1>Emails</h1>
+      <div class="pagehead__sub">Liste des emails ingérés depuis Gmail, paginée et filtrable.</div>
+    </div>
+  </div>
+
+  <form class="filters" id="filters" onsubmit="return false;">
+    <div class="field">
+      <label for="f-sender">Expéditeur</label>
+      <input type="text" id="f-sender" placeholder="exemple@domaine.fr" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="f-label">Label</label>
+      <input type="text" id="f-label" placeholder="INBOX, IMPORTANT…" autocomplete="off">
+    </div>
+    <button class="btn btn--primary" id="f-apply" type="submit">Filtrer</button>
+    <button class="btn" id="f-reset" type="button">Réinitialiser</button>
+  </form>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Expéditeur</th>
+          <th>Sujet</th>
+          <th>Labels</th>
+          <th>État</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="mails-body">
+        <tr><td colspan="6"><div class="state"><span class="spinner"></span>Chargement…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager" id="pager">
+    <span class="pager__info" id="pager-info">—</span>
+    <button class="btn btn--sm" id="prev" type="button">← Précédent</button>
+    <button class="btn btn--sm" id="next" type="button">Suivant →</button>
+  </div>
+</main>
+
+<footer class="foot">Dashboard opérationnel — Agent Mail 24/7 · explodev.fr</footer>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/mails.js"></script>
+</body>
+</html>

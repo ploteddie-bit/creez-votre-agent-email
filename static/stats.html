@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Statistiques — Agent Mail 24/7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+<nav class="xnav">
+  <a class="xnav__brand" href="/" data-route="/">Agent Mail</a>
+  <a href="/mails" data-route="/mails">Emails</a>
+  <a href="/decisions" data-route="/decisions">Décisions</a>
+  <a href="/stats" data-route="/stats">Stats</a>
+  <a href="/learning" data-route="/learning">Apprentissage</a>
+  <a href="/config" data-route="/config">Config</a>
+  <span class="xnav__spacer"></span>
+  <a href="/api/health" class="xnav__meta">/api/health</a>
+  <a href="/cours" data-route="/cours">Cours</a>
+</nav>
+
+<main>
+  <div class="pagehead">
+    <div>
+      <h1>Statistiques</h1>
+      <div class="pagehead__sub">Vue d'ensemble sur
+        <select id="days" style="font:inherit">
+          <option value="7">7 jours</option>
+          <option value="30" selected>30 jours</option>
+          <option value="90">90 jours</option>
+          <option value="365">1 an</option>
+        </select>.
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid--cards" id="counters">
+    <div class="card"><div class="card__label">Emails ingérés</div><div class="card__value" id="c-emails">—</div><div class="card__hint">Total en base</div></div>
+    <div class="card"><div class="card__label">Décisions</div><div class="card__value" id="c-decisions">—</div><div class="card__hint">Journal cumulé</div></div>
+    <div class="card"><div class="card__label">Actions exécutées</div><div class="card__value" id="c-actions">—</div><div class="card__hint">action_queue status=done</div></div>
+  </div>
+
+  <h2>Répartition des opérations</h2>
+  <div class="table-wrap" id="actions-table-wrap">
+    <table>
+      <thead><tr><th>Opération</th><th class="num">Décisions</th><th class="num">Part</th></tr></thead>
+      <tbody id="actions-body"><tr><td colspan="3"><div class="state"><span class="spinner"></span>Chargement…</div></td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>Top 10 expéditeurs</h2>
+  <div class="table-wrap" id="senders-table-wrap">
+    <table>
+      <thead><tr><th>Expéditeur</th><th>Domaine</th><th class="num">Emails</th></tr></thead>
+      <tbody id="senders-body"><tr><td colspan="3"><div class="state"><span class="spinner"></span>Chargement…</div></td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>Activité par jour</h2>
+  <div class="table-wrap" id="daily-table-wrap">
+    <table>
+      <thead><tr><th>Jour</th><th class="num">Décisions</th><th class="num">Cumul barres</th></tr></thead>
+      <tbody id="daily-body"><tr><td colspan="3"><div class="state"><span class="spinner"></span>Chargement…</div></td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<footer class="foot">Dashboard opérationnel — Agent Mail 24/7 · explodev.fr</footer>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/stats.js"></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apprentissage — Agent Mail 24/7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+<nav class="xnav">
+  <a class="xnav__brand" href="/" data-route="/">Agent Mail</a>
+  <a href="/mails" data-route="/mails">Emails</a>
+  <a href="/decisions" data-route="/decisions">Décisions</a>
+  <a href="/stats" data-route="/stats">Stats</a>
+  <a href="/learning" data-route="/learning">Apprentissage</a>
+  <a href="/config" data-route="/config">Config</a>
+  <span class="xnav__spacer"></span>
+  <a href="/api/health" class="xnav__meta">/api/health</a>
+  <a href="/cours" data-route="/cours">Cours</a>
+</nav>
+
+<main>
+  <div class="pagehead">
+    <div>
+      <h1>Apprentissage</h1>
+      <div class="pagehead__sub">
+        Mesure de la précision de l'agent par opération, sur les
+        <span id="win-size">100</span> dernières décisions P2,
+        et progression vers l'autonomie (phase P2).
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid--cards" id="p2-cards">
+    <div class="card">
+      <div class="card__label">Phase P2</div>
+      <div class="card__value" id="p2-enabled">—</div>
+      <div class="card__hint">Action autonome</div>
+    </div>
+    <div class="card">
+      <div class="card__label">Précision globale (30 j)</div>
+      <div class="card__value" id="p2-precision">—</div>
+      <div class="card__hint">approuvés / (approuvés + rejetés)</div>
+    </div>
+    <div class="card">
+      <div class="card__label">Décisions évaluées (30 j)</div>
+      <div class="card__value" id="p2-evaluated">—</div>
+      <div class="card__hint">Avec retour utilisateur</div>
+    </div>
+  </div>
+
+  <h2>Précision par opération</h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0">
+      Chaque barre montre la précision mesurée ; le trait rouge vertical indique le seuil
+      à atteindre pour l'auto-exécution. Une opération sous le seuil reste en mode
+      proposition (P1).
+    </p>
+    <div id="precision-rows"><div class="state"><span class="spinner"></span>Chargement…</div></div>
+  </div>
+
+  <h2>Top domaines appris (archivage)</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Domaine</th><th class="num">Emails archivés</th></tr></thead>
+      <tbody id="domains-body"><tr><td colspan="2"><div class="state"><span class="spinner"></span>Chargement…</div></td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<footer class="foot">Dashboard opérationnel — Agent Mail 24/7 · explodev.fr</footer>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/learning.js"></script>
+</body>
+</html>

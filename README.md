@@ -1,174 +1,251 @@
 # Agent Mail 24/7
 
-Agent autonome de gestion d'emails par IA locale, sans cloud, sans
-suppression, sous garde-fous. 100% du traitement IA sur votre serveur.
+> **Un agent IA local qui gere votre boite mail sans cloud, sans
+> suppression, sous votre controle total.**
 
-> **Trois phases d'autonomie, mesurées avant d'être accordées :**
-> P0 *observer* → P1 *proposer* → P2 *agir*.
+Il apprend de vos habitudes, propose des actions, et (quand vous le
+decidez) agit en autonomie avec des garde-fous stricts. Tout reste
+sur votre serveur.
 
-## 🚀 Installation rapide
+---
 
-```bash
-# 1. Cloner et installer
-cd ~/email-learner
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Configurer
-cp configs/.env.example configs/.env
-cp configs/config.yaml.example configs/config.yaml
-# Éditer configs/config.yaml (IPs, paramètres)
-# Éditer configs/.env (mot de passe DB, credentials Gmail)
-
-# 3. Initialiser la base
-alembic upgrade head
-
-# 4. Lancer
-python -m src.main
-```
-
-## 🏗️ Architecture
-
-```
-Gmail API ──► Observer ──► Parser (anti-injection) ──► Embedder
-                  │              │                        │
-                  ▼              ▼                        ▼
-            sync_state     emails (PostgreSQL)   email_embeddings
-                                                          │
-Rules Engine ──► Recommender (P1) ──► Decider (P2) ──► Action Worker
-                          │                │                 │
-                          ▼                ▼                 ▼
-                  decision_journal    action_queue     Gmail API
-                          │                │                 │
-                          └────► Dashboard FastAPI ◄──────────┘
-```
-
-**Stack :** Python 3.11+, PostgreSQL 15 + pgvector, Ollama (bge-m3 + LLM),
-Firecracker (sandbox), FastAPI, Caddy.
-
-## 📁 Structure du projet
-
-```
-agent-mail/
-├── src/                    # Code source Python
-│   ├── config.py           # Settings Pydantic (YAML + env)
-│   ├── models.py           # Modèles Pydantic (MailDecision, EmailInDB, etc.)
-│   ├── db.py               # Helper connexion psycopg2
-│   ├── parser.py           # Parsing Gmail + sanitization nh3 + 7 anti-injection
-│   ├── gmail_client.py     # Wrapper Gmail API avec allowlist stricte
-│   ├── ingester.py         # UPSERT idempotent dans PostgreSQL
-│   ├── embedder.py         # bge-m3 via Ollama + recherche vectorielle
-│   ├── rules_engine.py     # 6 règles statiques + mots-clés critiques
-│   └── main.py             # Point d'entrée daemon
-├── tests/                  # 69 tests pytest (0 échec)
-│   ├── test_config.py      # Settings Pydantic
-│   ├── test_models.py      # Validation Pydantic stricte
-│   ├── test_parser.py      # 7 cas adversariaux + intégration
-│   ├── test_gmail_client.py # Allowlist + scan source
-│   ├── test_rules_engine.py # Toutes les règles
-│   └── test_embedder.py    # Construction texte embeddé
-├── alembic/                # Migrations DB
-│   └── versions/
-│       └── 001_initial_schema.py  # 9 tables, 10 index, 1 trigger
-├── configs/                # Configuration
-│   ├── config.yaml.example
-│   └── .env.example
-├── static/                 # Cours HTML (héritage pédagogique)
-│   ├── cours-agent-mail-24-7.html
-│   ├── index.html / prompts.html / plan.html / outils.html
-│   └── cover.png
-├── audio/                  # Versions audio (Edge TTS)
-├── docs/                   # Specs, prompts, plan
-│   ├── SPEC-agent-mail-v5.md
-│   ├── PROMPTS-agent-mail.md
-│   ├── PLAN-TRAVAIL-agent-mail.md
-│   └── OUTILS-agent-mail.md
-├── systemd/                # (à venir) services daemon
-├── scripts/                # (à venir) backup, restore, build VM
-├── archive/                # Anciennes versions
-├── versions/               # Snapshots antérieurs
-├── screenshots/            # Captures d'écran du cours
-├── requirements.txt
-├── alembic.ini
-├── pytest.ini
-├── .gitignore
-└── README.md (ce fichier)
-```
-
-## 🛠️ Commandes CLI
+## En 30 secondes
 
 ```bash
-# Tests
-python -m pytest tests/ -v
+# 1. Installer (une seule fois)
+./bootstrap.sh
 
-# Daemon
-python -m src.main                  # boucle infinie
-python -m src.main --sync-once      # une seule passe de sync
-python -m src.main --embed 100      # embedde 100 emails
-python -m src.main --health         # affiche l'état et sort
-python -m src.main --debug          # logs DEBUG
+# 2. Configurer OAuth Gmail
+python -m src.main setup-oauth
+# Suivre les instructions a l'ecran
 
-# Migrations
-alembic upgrade head                # applique toutes les migrations
-alembic downgrade -1                # rollback d'une migration
-alembic current                     # affiche la version courante
+# 3. Lancer
+make run
 ```
 
-## 🔒 Sécurité (philosophie du projet)
+C'est tout. Le daemon tourne en boucle, le dashboard est sur
+`http://10.0.0.XXX:8080` (derriere Caddy), et vous pouvez dormir
+tranquille.
 
-**Toutes les protections sont obligatoires et vérifiables :**
+---
 
-| Couche | Implémentation | Test |
-|--------|---------------|------|
-| Anti-injection prompt | 7 patterns détectés par `parser.py` | `test_case_1_*.py` à `test_case_7_*.py` |
-| Sandboxing | À venir : Firecracker VM jetable | — |
-| Allowlist Gmail | 19 méthodes autorisées, 7 interdites | `test_*_forbidden` |
-| Mots-clés critiques | JAMAIS auto-archivés (facture, paiement, etc.) | `test_rule_no_false_archive_for_billing` |
-| Idempotence | `INSERT ... ON CONFLICT DO UPDATE` | `test_action_queue_item_idempotency_key_required` |
-| Append-only journal | `decision_journal` n'a que des INSERTs | (à tester E2E) |
-| Kill-switch P2 | `Settings.p2.enabled = false` par défaut | `test_settings_default_safety` |
-| Pas de cloud | Ollama local, scope `gmail.modify` uniquement | (à valider au déploiement) |
+## Ce que ca fait
 
-## 🧪 Tests
+| Phase | Comportement | Par defaut |
+|-------|--------------|------------|
+| **P0** | Observe : enregistre chaque mail et chaque action, ne touche a rien | Active des le demarrage |
+| **P1** | Propose : pour chaque mail, suggere une action que vous validez | Active des le demarrage |
+| **P2** | Agit : execute seul si la precision mesuree est suffisante | **OFF** (kill-switch) |
+
+**Trois principes non negociables :**
+
+1. **Vos mails ne quittent jamais votre serveur.** Tout traitement
+   IA est local (Ollama + bge-m3 + LLM local).
+2. **Aucune suppression.** L'IA utilise uniquement le dossier
+   `IA-Review` (soft-delete) pour signaler les mails a revoir.
+3. **Append-only.** Le journal des decisions ne perd jamais rien :
+   vous pouvez toujours rejouer l'historique.
+
+---
+
+## Installation pas-a-pas
+
+### Prerequis
+
+- **Python 3.11+**
+- **PostgreSQL 15+** avec extension `pgvector`
+- **Ollama** avec les modeles `bge-m3` (embeddings) et un LLM
+  (par defaut `llama3.1:8b`)
+- **Linux/macOS** (Windows possible via WSL)
+- Acces reseau sortant pour l'API Gmail (HTTPS sortant uniquement)
+
+### 1. Cloner et installer
 
 ```bash
-# Tout
-python -m pytest
-
-# Avec couverture
-python -m pytest --cov=src --cov-report=term-missing
-
-# Tests adversariaux uniquement
-python -m pytest -m adversarial -v
-
-# Tests d'intégration (nécessitent PostgreSQL + Ollama)
-python -m pytest -m integration -v
+git clone <url> email-learner
+cd email-learner
+./bootstrap.sh        # cree le venv, installe les deps, cree configs/.env
 ```
 
-**État actuel : 69 tests, 100% passent, 0 dépendance réseau.**
+### 2. Configurer la connexion PostgreSQL
 
-## 📚 Documentation
+Editer `configs/.env` :
 
-- **Spec complète** : `docs/SPEC-agent-mail-v5.md` (15 sections)
-- **Prompts par subagent** : `docs/PROMPTS-agent-mail.md` (14 agents)
-- **Plan de travail** : `docs/PLAN-TRAVAIL-agent-mail.md`
-- **Outils requis** : `docs/OUTILS-agent-mail.md`
-- **Cours HTML interactif** : `static/cours-agent-mail-24-7.html`
-- **Versions audio** : `audio/cours-agent-mail.mp3` (27 min)
+```bash
+EMAIL_LEARNER_DB_PASSWORD=votre_mot_de_passe_postgres
+```
 
-## 🚦 État d'avancement
+Editer `configs/config.yaml`, remplacer `10.0.0.XXX` par l'IP de votre
+serveur PostgreSQL (ou utiliser `localhost` si tout est sur la meme
+machine).
 
-| Phase | Statut | Composants |
-|-------|--------|------------|
-| **P0 - Fondations** | 🟢 ~70% | config, models, db, parser, ingester, embedder, gmail_client, rules_engine |
-| **P1 - Assistance** | 🟡 À faire | recommender, dashboard |
-| **P2 - Autonomie** | 🔴 À faire | decider, action_worker, sandbox Firecracker |
-| **DevOps** | 🟡 À faire | systemd, Caddy, backup, restore test |
+### 3. Creer la base et lancer les migrations
 
-## ⚖️ Licence & contact
+```bash
+psql -h <ip> -U postgres -c "CREATE DATABASE email_learner;"
+psql -h <ip> -U postgres -c "CREATE USER email_learner_app WITH ENCRYPTED PASSWORD '...';"
+psql -h <ip> -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE email_learner TO email_learner_app;"
+make migrate
+```
 
-Cours et code publiés par **explodev.fr**.
+### 4. Configurer OAuth Gmail
 
-> Les adresses IP et noms de machines sont génériques
-> (`serveur-local`, `10.0.0.XXX`). Aucune infrastructure réelle n'est exposée.
+Suivre le guide detaille dans [docs/SETUP-OAUTH.md](docs/SETUP-OAUTH.md)
+ou simplement :
+
+```bash
+make setup-oauth    # affiche le guide etape par etape
+```
+
+En resume : creer un projet Google Cloud, activer l'API Gmail,
+creer un identifiant OAuth 2.0 (type "Desktop app"), telecharger le
+JSON et le placer dans `configs/gmail-credentials.json`.
+
+### 5. Premier lancement
+
+```bash
+make run
+```
+
+Au premier demarrage, le daemon va :
+1. Detecter qu'il n'y a pas encore de sync_state
+2. Faire un **sync full** : recuperer les 6 derniers mois de mails
+3. Inserer chaque mail dans la base (idempotent)
+4. Generer les embeddings
+5. Proposer des decisions (P1)
+6. Afficher le dashboard sur le port 8080
+
+---
+
+## Utilisation quotidienne
+
+### Commandes Make (raccourcis)
+
+```bash
+make help           # affiche toutes les commandes
+make run            # lance le daemon en boucle
+make dashboard      # lance juste le dashboard FastAPI
+make health         # JSON etat de sante
+make sync           # sync Gmail une fois (delta)
+make sync-full      # sync Gmail complet (6 mois, pour rattrapage)
+make test           # lance tous les tests
+make logs           # tail des logs systemd
+```
+
+### Dashboard web
+
+Accessible sur `http://10.0.0.XXX:8080` :
+
+- **Vue d'ensemble** (`/`) : compteurs, phase actuelle, sante systeme
+- **Mails** (`/mails.html`) : liste paginee, recherche
+- **Decisions** (`/decisions.html`) : journal avec boutons
+  Approuver / Rejeter pour les decisions P1
+- **Stats** (`/stats.html`) : repartition actions, top expediteurs
+- **Learning** (`/learning.html`) : precision par action, progression
+  vers P2
+- **Config** (`/config.html`) : toggles P2 et mode Vacances
+
+### Activer P2 (autonomie)
+
+1. Aller sur `/learning` et verifier que la precision est au-dessus
+   des seuils (>95% pour archive, >90% pour mark_read, etc.)
+2. Aller sur `/config`, cocher "Activer P2", Enregistrer
+3. L'agent commence a executer les actions archive/mark_read/etc.
+   automatiquement, sous les garde-fous
+4. Surveiller `/api/health` et `/learning` regulierement
+5. Pour arreter immediatement : decocher P2 dans `/config`
+
+---
+
+## Architecture (vue d'ensemble)
+
+```
+   Gmail API
+       |
+       v
+  +---------+    +---------+    +----------+    +---------+
+  |Observer |--->| Parser  |--->| Embedder |--->| DB      |
+  +---------+    | (nh3)   |    | (bge-m3) |    |(Postgres|
+       |         +---------+    +----------+    |+pgvector)|
+       |                                          +---------+
+       |                                               |
+       |         +-------------+                       v
+       |         | Rules       |<--+           +-----------+
+       +-------->| Engine      |   |           | Decider   |
+                 +-------------+   |           | (P2)      |
+                       |          |           +-----------+
+                       v          |                |
+                 +---------+      |           +-----------+
+                 |Recom-   |<-----+           | Action    |
+                 |mender   |--+  RAG         | Worker    |
+                 |(LLM)    |                  +-----------+
+                 +---------+                       |
+                       |                          v
+                       v                     Gmail API
+                 decision_journal
+                 (append-only)
+```
+
+**Stack technique :** Python 3.11+, FastAPI, PostgreSQL + pgvector,
+Ollama (bge-m3 + llama3.1:8b), Pydantic v2, Alembic.
+
+---
+
+## Tests
+
+```bash
+make test           # 238+ tests
+make test-fast      # skip les lents
+make test-contracts # uniquement les tests de contrat SQL
+make test-coverage  # avec couverture
+```
+
+**Tests garantis :** anti-injection prompt, allowlist Gmail,
+mots-cles critiques, idempotence, circuit-breaker, contrats SQL.
+
+---
+
+## Documentation complementaire
+
+- [docs/SPEC-agent-mail-v5.md](docs/SPEC-agent-mail-v5.md) : specification
+  complete
+- [docs/PROMPTS-agent-mail.md](docs/PROMPTS-agent-mail.md) : prompts
+  des 14 subagents
+- [docs/PLAN-TRAVAIL-agent-mail.md](docs/PLAN-TRAVAIL-agent-mail.md) :
+  plan d'execution
+- [docs/OUTILS-agent-mail.md](docs/OUTILS-agent-mail.md) : dependances
+  detaillees
+- [docs/SETUP-OAUTH.md](docs/SETUP-OAUTH.md) : guide OAuth Gmail
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) : exploitation / backup
+- [docs/REVIEW-ANGLES-MORTS-2026-07-17.md](docs/REVIEW-ANGLES-MORTS-2026-07-17.md) :
+  audit externe et reponses
+- [docs/PLAN-LIVRABLE-FINAL.md](docs/PLAN-LIVRABLE-FINAL.md) : plan
+  pour finir a 100%
+
+---
+
+## Philosophie
+
+> **L'autonomie se merite.**
+
+Ce projet ne branche pas une IA sur votre boite mail en lui disant
+"debrouille-toi". Il observe d'abord, puis propose, et seulement
+quand la precision mesuree est suffisante, il agit. Et toujours sous
+garde-fous, avec un kill-switch toujours disponible.
+
+> **Vos donnees restent chez vous.**
+
+Pas de LLM cloud. Pas d'envoi de mails sortants. Pas d'appels
+tierces. Le daemon parle uniquement avec Gmail (entrant/sortant via
+OAuth strictement scope `gmail.modify`) et Ollama (local).
+
+> **Transparence totale.**
+
+Chaque decision est expliquee en langage naturel, chaque action
+est journalisee avec son contexte RAG, chaque garde-fou est testable.
+
+---
+
+## Licence
+
+MIT (ou equivalente, voir le projet d'origine).
