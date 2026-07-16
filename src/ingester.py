@@ -53,6 +53,21 @@ ON CONFLICT (id) DO UPDATE SET
 class EmailIngester:
     """Service d'ingestion idempotente des emails."""
 
+    @staticmethod
+    def _to_row(email: EmailInDB) -> dict:
+        """Convertit le modèle en dict de paramètres SQL.
+
+        `raw_headers` (dict Python) est adapté en JSONB via
+        `psycopg2.extras.Json` — psycopg2 ne sait pas adapter
+        un dict nativement.
+        """
+        from psycopg2.extras import Json  # lazy import (tests unitaires)
+
+        data = email.model_dump()
+        if data.get("raw_headers") is not None:
+            data["raw_headers"] = Json(data["raw_headers"])
+        return data
+
     def ingest_email(self, email: EmailInDB) -> bool:
         """Insère ou met à jour un email. Retourne True si succès.
 
@@ -62,7 +77,7 @@ class EmailIngester:
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(_UPSERT_SQL, email.model_dump())
+                    cur.execute(_UPSERT_SQL, self._to_row(email))
                 conn.commit()
             logger.debug("ingested email %s", email.id)
             return True
@@ -90,7 +105,7 @@ class EmailIngester:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         from psycopg2.extras import execute_batch
-                        execute_batch(cur, _UPSERT_SQL, [e.model_dump() for e in chunk])
+                        execute_batch(cur, _UPSERT_SQL, [self._to_row(e) for e in chunk])
                     conn.commit()
                 ingested += len(chunk)
                 logger.info("ingested batch of %d emails", len(chunk))

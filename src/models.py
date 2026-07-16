@@ -175,6 +175,7 @@ class EmailInDB(BaseModel):
     is_starred: bool = False
     is_deleted: bool = False
     is_archived: bool = False
+    raw_headers: Optional[dict] = None  # en-têtes bruts (JSONB), figés à l'ingestion
 
 
 # === Décision complète (pour le journal append-only) ===

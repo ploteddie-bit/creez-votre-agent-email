@@ -111,3 +111,27 @@ def test_email_in_db_default_flags() -> None:
     assert e.has_attachments is False
     assert e.labels == []
     assert e.recipients == []
+
+
+def test_email_in_db_raw_headers_field() -> None:
+    """raw_headers existe dans le modèle (contrat avec l'UPSERT ingester)."""
+    from datetime import datetime
+    from src.models import EmailInDB
+
+    e = EmailInDB(
+        id="msg_1",
+        sender="Test",
+        sender_email="test@test.com",
+        date_received=datetime(2026, 7, 16),
+    )
+    assert "raw_headers" in e.model_dump()
+    assert e.raw_headers is None
+
+    e2 = EmailInDB(
+        id="msg_2",
+        sender="Test",
+        sender_email="test@test.com",
+        date_received=datetime(2026, 7, 16),
+        raw_headers={"From": "test@test.com", "DKIM-Signature": "v=1; ..."},
+    )
+    assert e2.raw_headers["DKIM-Signature"].startswith("v=1")
