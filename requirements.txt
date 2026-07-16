@@ -17,6 +17,7 @@ alembic>=1.13.0
 # ── Traitement des emails ─────────────────────────
 nh3>=0.2.15           # Sanitization HTML (binding Rust, maintenu)
 pypdf>=4.0.0          # Extraction texte PDF
+chardet>=5.0.0        # Détection d'encodage (vieux mails ISO-8859-1/Windows-1252)
 
 # ── IA locale ─────────────────────────────────────
 httpx>=0.26.0         # Client HTTP async pour Ollama
