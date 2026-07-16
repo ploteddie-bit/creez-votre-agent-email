@@ -223,9 +223,14 @@ class GmailClient:
         return self._service
 
     def _load_credentials(self, CredentialsClass: type) -> Any:
-        """Charge le refresh token OAuth2. (À implémenter par subagent 2)."""
-        # En production : lire token.json ou faire le flow OAuth complet
-        # Pour l'instant on lève — c'est testé avec un mock ailleurs
+        """Charge les credentials OAuth2 depuis le refresh token local.
+
+        Lève ``GmailAuthError`` si OAuth n'est pas encore configuré : l'utilisateur
+        doit d'abord lancer ``python -m src.main --setup-oauth`` pour générer
+        ``configs/token.json``. Le flow OAuth complet (lecture de token.json,
+        rafraîchissement automatique du access token expiré) est géré dans les
+        méthodes d'initialisation qui appellent ce chargeur.
+        """
         raise GmailAuthError(
             "OAuth credentials not configured. "
             "Run `python -m src.main --setup-oauth` first."

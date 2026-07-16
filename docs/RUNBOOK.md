@@ -115,6 +115,20 @@ Les logs sont structures :
 
 ## Sauvegarde
 
+### Variables d'environnement recommandees
+
+Pour eviter de repeter `-h <host> -U email_learner_app` a chaque commande,
+definir ces variables dans votre `~/.bashrc` ou dans le script :
+
+```bash
+export PGHOST=10.0.0.XXX        # hote PostgreSQL
+export PGPORT=5432
+export PGDATABASE=email_learner
+export PGUSER=email_learner_app
+# IMPORTANT: le mot de passe reste dans configs/.env, pas ici
+export PGPASSWORD="$(grep EMAIL_LEARNER_DB_PASSWORD configs/.env | cut -d= -f2)"
+```
+
 ### Base de donnees
 
 ```bash
@@ -122,10 +136,14 @@ Les logs sont structures :
 pg_dump -h <host> -U email_learner_app email_learner \
   > backup_$(date +%Y%m%d).sql
 
-# Dump compresse
+# Dump compresse (recommande)
 pg_dump -h <host> -U email_learner_app email_learner | gzip \
   > backup_$(date +%Y%m%d).sql.gz
 ```
+
+Duree typique : 2-10 min selon le volume. Les embeddings (vector(1024))
+et les journaux (decision_journal, action_queue) representent
+l'etat appris du systeme : les proteger imperativement.
 
 ### Automatisation (cron)
 
@@ -182,21 +200,33 @@ sudo systemctl start email-learner
 ### Test de restauration
 
 Il est recommande de tester periodiquement la restauration (mensuel)
-sur une base de test :
+sur une base de test, pour verifier que les backups sont exploitables.
+
+Procedure recommandee :
 
 ```bash
-# Creer une base de test
+# 1. Arreter le daemon (pas obligatoire, mais prudent)
+sudo systemctl stop email-learner email-learner-worker
+
+# 2. Creer une base de test
 psql -h <host> -U postgres -c "CREATE DATABASE email_learner_test;"
 
-# Restaurer le dernier dump
+# 3. Restaurer le dernier dump
 gunzip -c backup_$(date +%Y%m%d).sql.gz | \
   psql -h <host> -U email_learner_app email_learner_test
 
-# Verifier le nombre de rows
-psql -h <host> -U email_learner_app email_learner_test \
-  -c "SELECT COUNT(*) FROM emails;"
+# 4. Verifier le contenu
+psql -h <host> -U email_learner_app email_learner_test -c "SELECT COUNT(*) FROM emails;"
 # Doit etre > 1000 (sinon le dump est vide)
+psql -h <host> -U email_learner_app email_learner_test -c "SELECT COUNT(*) FROM decision_journal;"
+psql -h <host> -U email_learner_app email_learner_test -c "SELECT COUNT(*) FROM email_embeddings;"
+
+# 5. Nettoyer
+psql -h <host> -U postgres -c "DROP DATABASE email_learner_test;"
 ```
+
+Critere de succes : les 3 counts > 0. Si un count est 0, le backup
+est corrompu ou incomplet.
 
 ---
 

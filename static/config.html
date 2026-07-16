@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuration — Agent Mail 24/7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+<nav class="xnav">
+  <a class="xnav__brand" href="/" data-route="/">Agent Mail</a>
+  <a href="/mails" data-route="/mails">Emails</a>
+  <a href="/decisions" data-route="/decisions">Décisions</a>
+  <a href="/stats" data-route="/stats">Stats</a>
+  <a href="/learning" data-route="/learning">Apprentissage</a>
+  <a href="/config" data-route="/config">Config</a>
+  <span class="xnav__spacer"></span>
+  <a href="/api/health" class="xnav__meta">/api/health</a>
+  <a href="/cours" data-route="/cours">Cours</a>
+</nav>
+
+<main>
+  <div class="pagehead">
+    <div>
+      <h1>Configuration</h1>
+      <div class="pagehead__sub">
+        État courant du système. Les changements ci-dessous sont appliqués en mémoire
+        (redémarrage = retour au <code>configs/config.yaml</code>).
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid--2">
+    <div class="card">
+      <h3 style="margin-top:0">Modèles IA</h3>
+      <div class="table-wrap" style="border:none">
+        <table>
+          <tbody>
+            <tr><td>Environnement</td><td class="mono" id="k-env">—</td></tr>
+            <tr><td>LLM (Ollama)</td><td class="mono" id="k-llm">—</td></tr>
+            <tr><td>Embeddings</td><td class="mono" id="k-embed">—</td></tr>
+            <tr><td>Polling Gmail</td><td class="mono" id="k-poll">—</td></tr>
+            <tr><td>Quota P2 / jour</td><td class="mono" id="k-max">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Commandes runtime</h3>
+      <form id="config-form" onsubmit="return false;">
+        <div style="margin-bottom:14px">
+          <label class="toggle">
+            <input type="checkbox" id="opt-p2">
+            <span><strong>Activer la phase P2</strong> (action autonome)<br>
+            <small class="muted">Autorise l'agent à exécuter lui-même les opérations
+            (archiver, marquer lu…) quand la précision dépasse le seuil.</small></span>
+          </label>
+        </div>
+        <div style="margin-bottom:18px">
+          <label class="toggle">
+            <input type="checkbox" id="opt-vacation">
+            <span><strong>Mode vacances</strong><br>
+            <small class="muted">Suspend temporairement toute action autonome.</small></span>
+          </label>
+        </div>
+        <button class="btn btn--primary" id="save" type="submit">Enregistrer</button>
+        <button class="btn" id="reload" type="button">Recharger depuis l'API</button>
+      </form>
+      <p class="muted" style="font-size:0.82rem">
+        ⚠️ Activer P2 est une décision sensible. Vérifiez d'abord la précision
+        sur la page <a href="/learning">Apprentissage</a> et que le kill-switch
+        global (<code>EMAIL_LEARNER_KILL_SWITCH</code>) est à <code>false</code>.
+      </p>
+    </div>
+  </div>
+</main>
+
+<footer class="foot">Dashboard opérationnel — Agent Mail 24/7 · explodev.fr</footer>
+<script src="/static/js/common.js"></script>
+<script src="/static/js/config.js"></script>
+</body>
+</html>
