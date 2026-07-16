@@ -1,0 +1,187 @@
+# OUTILS — Agent Mail 24/7
+
+> Inventaire complet des outils et dépendances nécessaires  
+> Projet : SPEC-agent-mail v6  
+> Créé : 2026-07-06
+
+---
+
+## 1. Infrastructure (sur ia-general)
+
+| Outil | Version min | Rôle | Installation |
+|-------|------------|------|-------------|
+| **PostgreSQL** | 15+ | Base de données principale | `apt install postgresql-15` |
+| **pgvector** | 0.7+ | Recherche vectorielle (embeddings) | `apt install postgresql-15-pgvector` |
+| **postgresql-contrib** | — | Dictionnaire français `tsvector` | `apt install postgresql-contrib` |
+| **Ollama** | 0.4+ | Serveur LLM local + embeddings | `curl -fsSL https://ollama.com/install.sh \| sh` |
+| **Firecracker** | 1.8+ | Micro-VM pour sandbox | `apt install firecracker` ou binary release |
+| **KVM** | — | Virtualisation kernel (prérequis Firecracker) | `ls -la /dev/kvm` doit exister |
+| **Caddy** | 2.8+ | Reverse proxy HTTPS (dashboard) | `apt install caddy` |
+| **Docker** | 24+ | Build image conteneur Ollama pour VM | `apt install docker.io` |
+| **Python** | 3.11+ | Runtime applicatif | `apt install python3.11 python3.11-venv` |
+| **systemd** | — | Services daemon + timers | Présent par défaut |
+
+---
+
+## 2. Modèles Ollama
+
+| Modèle | Taille ~ | Rôle | Commande |
+|--------|---------|------|----------|
+| **bge-m3** | ~2 Go | Embeddings multilingues (1024d) | `ollama pull bge-m3` |
+| **LLM classification** | ~4-8 Go | Classification des emails (P1/P2) | `ollama pull <modèle>` |
+
+**Candidats LLM (à sélectionner) :**
+
+| Modèle | RAM | Forces | Faiblesses |
+|--------|-----|--------|-----------|
+| `llama3.1:8b` | ~6 Go | Bon français, structured output fiable | Lent sur CPU |
+| `mistral:7b` | ~5 Go | Rapide, bon français | Moins bon en structured output |
+| `phi4:14b` | ~9 Go | Très bon structured output | Lourd, français moyen |
+| `qwen2.5:7b` | ~5 Go | Multilingue natif, rapide | Moins testé en français |
+| `gemma2:9b` | ~6 Go | Bon équilibre | Google, licence restrictive |
+
+---
+
+## 3. Python (pip)
+
+```
+# ── Gmail API ──────────────────────────────────
+google-api-python-client       # Gmail API v1
+google-auth-oauthlib           # OAuth2 flow
+google-auth-httplib2           # Transport HTTP OAuth2
+
+# ── Base de données ────────────────────────────
+psycopg2-binary                # Driver PostgreSQL
+pgvector                       # Extension vectorielle Python
+alembic                        # Migrations DB
+
+# ── Traitement des emails ──────────────────────
+nh3                            # Sanitization HTML (Rust binding)
+pypdf                          # Extraction texte PDF
+
+# ── Dashboard ──────────────────────────────────
+fastapi                        # Framework API REST
+uvicorn                        # Serveur ASGI
+jinja2                         # Templates HTML
+websockets                     # WebSocket temps réel
+
+# ── Utilitaires ────────────────────────────────
+httpx                          # Client HTTP async
+pyyaml                         # Configuration YAML
+pydantic                       # Validation JSON structurée
+
+# ── Tests (dev uniquement) ─────────────────────
+pytest                         # Framework de test
+pytest-asyncio                 # Support async
+httpx                          # Déjà listé, utilisé aussi pour TestClient
+```
+
+---
+
+## 4. Image VM Alpine (sandbox Firecracker)
+
+| Composant | Rôle | Source |
+|-----------|------|--------|
+| **kernel `vmlinux.bin`** | Kernel Linux minimal pour Firecracker | Alpine Linux ou build custom |
+| **rootfs `rootfs.ext4`** | Système de fichiers minimal (~50 Mo) | Alpine minirootfs |
+| **Python 3.11** | Exécution `sandbox_vm.py` dans la VM | Inclus dans rootfs |
+| **Ollama (conteneur)** | Classification LLM dans la VM, `--network=none` | Dockerfile dédié |
+
+Script de build : `./scripts/build_vm_image.sh`
+
+---
+
+## 5. Développement (poste local)
+
+| Outil | Rôle |
+|-------|------|
+| **git** | Versionnement |
+| **python3.11-venv** | Environnement virtuel isolé |
+| **pytest** | Tests unitaires + E2E |
+| **curl** | Tests manuels API |
+| **psql** | Vérification DB |
+| **ollama** | Test local des modèles |
+| **docker** | Build image conteneur Ollama |
+
+---
+
+## 6. Credentials & Config
+
+| Fichier | Rôle | Stockage |
+|---------|------|----------|
+| `gmail-credentials.json` | OAuth2 client secret Google Cloud | `/home/eddie/email-learner/configs/` (gitignored) |
+| `token.json` | Refresh token OAuth2 | Généré au premier `--setup-oauth`, gitignored |
+| `config.yaml` | Configuration applicative | `/home/eddie/email-learner/configs/` |
+
+**Scope Gmail OAuth2 :** `https://www.googleapis.com/auth/gmail.modify`
+
+Récupération des credentials : depuis `kimi-rag` ou `sg-rag`.
+
+---
+
+## 7. Accès réseau
+
+| Source | Destination | Port | Protocole | Rôle |
+|--------|-------------|------|-----------|------|
+| ia-general | Gmail API | 443 | HTTPS | Sync emails |
+| ia-general | accounts.google.com | 443 | HTTPS | OAuth2 refresh |
+| LAN (10.0.0.x) | ia-general | 8080 | HTTPS | Dashboard |
+| ia-general (localhost) | ia-general | 5432 | PostgreSQL | DB |
+| ia-general (localhost) | ia-general | 11434 | HTTP | Ollama API |
+
+**Pas de règle NAT/port forwarding vers internet pour le dashboard.**
+
+---
+
+## 8. Services systemd
+
+| Service | Rôle |
+|---------|------|
+| `email-learner.service` | Daemon principal (observer + ingester + embedder) |
+| `email-learner-worker.service` | Worker action_queue → Gmail API |
+| `email-learner-backup.timer` | pg_dump quotidien |
+| `email-learner-train.timer` | Fine-tune QLoRA nocturne (P2) |
+
+---
+
+## 9. Vérifications pré-déploiement
+
+```bash
+# 1. PostgreSQL
+psql -h 10.0.0.xxx -U email_learner_app -d email_learner -c "SELECT 1;"
+
+# 2. pgvector
+psql -h 10.0.0.xxx -U email_learner_app -d email_learner -c "SELECT '[1,2,3]'::vector;"
+
+# 3. Dictionnaire français
+psql -h 10.0.0.xxx -U email_learner_app -d email_learner -c "SELECT to_tsvector('french', 'échéance facture');"
+
+# 4. Ollama
+curl -s http://10.0.0.xx:11xx/api/tags | python3 -c "import sys,json; print([t['name'] for t in json.load(sys.stdin)['models']])"
+
+# 5. KVM
+ls -la /dev/kvm && echo "KVM OK" || echo "KVM ABSENT — sandbox VM indisponible"
+
+# 6. Firecracker
+firecracker --version
+
+# 7. Caddy
+caddy version
+
+# 8. RAM disponible
+free -h | grep Mem
+```
+
+---
+
+## 10. Budget disque estimé
+
+| Élément | Espace |
+|---------|--------|
+| Code source + venv | ~500 Mo |
+| Modèles Ollama (bge-m3 + LLM) | ~10 Go |
+| PostgreSQL (2000 emails + embeddings) | ~2 Go |
+| Logs (30 jours) | ~500 Mo |
+| Image VM Alpine + kernel | ~100 Mo |
+| Backups (7j local) | ~5 Go |
+| **Total** | **~18 Go** |

@@ -1,0 +1,15 @@
+{
+  "id": "2026-07-07-agent-mail-auto-learning-safe",
+  "title": "Agent Mail - activer apprentissage automatique et automatisation safe",
+  "repo": "/home/eddie/email-learner",
+  "target": "ia-general:/home/eddie/email-learner",
+  "risk": "high",
+  "summary": "Activer le flux vivant feedback-learning: génération automatique de décisions P1 pour les mails réels, mesure des validations humaines, et passage P2 uniquement pour les opérations allowlist mark_read/archive/star/move_ia_review. L'IA ne doit pas obtenir send/delete Gmail.",
+  "constraints": [
+    "Cible uniquement ia-general",
+    "Aucun privilège send/delete Gmail",
+    "Conserver p2_enabled contrôlé et observable",
+    "Tests obligatoires",
+    "Backups avant modification remote"
+  ]
+}

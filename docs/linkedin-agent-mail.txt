@@ -1,0 +1,29 @@
+De zéro à un agent mail autonome : le cours technique complet, gratuit.
+
+Et si votre boîte mail était triée par une IA qui ne la quitte jamais ?
+
+Confier sa correspondance à un assistant cloud, c'est envoyer toute sa vie privée à un tiers. J'ai voulu un troisième chemin : un agent qui apprend vos habitudes et finit par trier à votre place, mais qui vit entièrement sur un serveur que vous contrôlez. Aucun mail ne part vers un LLM externe. Jamais.
+
+Le principe qui structure tout : l'autonomie se mérite.
+
+On ne branche pas une IA sur sa boîte en lui disant débrouille-toi. On la fait passer par trois phases.
+
+P0, elle observe. Elle enregistre chaque mail et chaque action, elle apprend, elle ne touche à rien.
+
+P1, elle propose. Pour chaque message entrant, elle suggère une action que vous validez d'un clic.
+
+P2, elle agit seule. Mais seulement quand la précision réellement mesurée sur les cent dernières décisions est assez haute. Ce n'est pas la confiance déclarée par l'IA qui débloque l'autonomie, ce sont les résultats. Et toujours sous quota, garde-fous et kill-switch.
+
+Trois partis pris qui changent tout :
+
+Chaque mail est ouvert dans une micro-VM Firecracker jetable, sans réseau, détruite en trente secondes. On ne prie pas pour qu'aucune injection de prompt ne passe, on suppose qu'une finira par réussir, et on fait en sorte qu'elle soit sans conséquence.
+
+L'IA ne supprime jamais rien. Interdiction inscrite dans le code. Au pire, un mail part en soft-delete vers un dossier de revue.
+
+Tout est journalisé en append-only : modèle, version, prompt, distances RAG, réponse brute. Rien n'est effacé, tout est auditable.
+
+J'ai documenté l'architecture complète, couche par couche, de la réception d'un mail à l'action exécutée : sécurité anti-injection, sandbox, embeddings et RAG Few-Shot, base PostgreSQL, orchestration par subagents.
+
+Le cours technique complet est en ligne. Le lien est en commentaire, venez voir comment c'est construit.
+
+#IA #Cybersecurite #SelfHosted #Automatisation #LLM #Privacy
