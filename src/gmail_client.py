@@ -137,14 +137,28 @@ class GmailClient:
     # ----------------------------------------------------------------
     # Helpers haut-niveau (méthodes métier)
     # ----------------------------------------------------------------
-    def list_messages(self, query: str = "", max_results: int = 100) -> list[dict]:
-        """Liste les messages Gmail (wrapper sûr de `messages.list`)."""
+    def list_messages(
+        self, query: str = "", max_results: int = 100,
+        page_token: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str]]:
+        """Liste les messages Gmail (wrapper sûr de `messages.list`).
+
+        Returns:
+            (messages, next_page_token) :
+            - messages : liste de {id, threadId, ...}
+            - next_page_token : string pour la page suivante, None si fini
+        """
         self.validate_call("users.messages.list")
         service = self._get_service()
-        result = service.users().messages().list(
-            userId="me", q=query, maxResults=max_results,
-        ).execute()
-        return result.get("messages", [])
+        kwargs: dict[str, Any] = {
+            "userId": "me", "q": query, "maxResults": max_results,
+        }
+        if page_token:
+            kwargs["pageToken"] = page_token
+        result = service.users().messages().list(**kwargs).execute()
+        messages = result.get("messages", [])
+        next_token = result.get("nextPageToken")
+        return messages, next_token
 
     def get_message(self, msg_id: str, format: str = "full") -> dict:
         """Récupère un message complet (wrapper sûr de `messages.get`)."""

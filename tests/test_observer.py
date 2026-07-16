@@ -173,7 +173,8 @@ def mock_db(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 def mock_gmail() -> MagicMock:
     """Mock du GmailClient."""
     client = MagicMock()
-    client.list_messages.return_value = []
+    # list_messages retourne maintenant (messages, next_page_token)
+    client.list_messages.return_value = ([], None)
     client.list_history.return_value = []
     client.get_message.return_value = {"id": "msg_1", "payload": {"headers": []}}
     client.list_labels.return_value = []
@@ -243,6 +244,53 @@ class TestGmailObserverSync:
         # Pour ce test, on verifie juste que l'API n'est pas appelée
         observer.get_label_id("INBOX")
         mock_gmail.list_labels.assert_not_called()
+
+    def test_sync_full_consumes_all_pages(
+        self, observer: "GmailObserver", mock_gmail: MagicMock, mock_db: MagicMock,
+    ) -> None:
+        """sync_full doit consommer TOUS les nextPageToken jusqu'a exhaustion."""
+        # Mock : 3 pages, chacune avec un nextPageToken, puis None
+        mock_gmail.list_messages.side_effect = [
+            ([{"id": "msg_1"}], "page_token_2"),
+            ([{"id": "msg_2"}, {"id": "msg_3"}], "page_token_3"),
+            ([{"id": "msg_4"}], None),  # Derniere page
+        ]
+        # Mock _ingest_one pour eviter le parsing
+        observer._ingest_one = MagicMock(return_value=True)
+
+        ingested = observer.sync_full(max_results=10)
+        assert ingested == 4
+        # 3 appels a list_messages (3 pages)
+        assert mock_gmail.list_messages.call_count == 3
+        # Premier appel sans page_token, ensuite avec
+        first_call_kwargs = mock_gmail.list_messages.call_args_list[0].kwargs
+        assert "page_token" not in first_call_kwargs or first_call_kwargs["page_token"] is None
+        second_call_kwargs = mock_gmail.list_messages.call_args_list[1].kwargs
+        assert second_call_kwargs.get("page_token") == "page_token_2"
+
+    def test_sync_full_terminates_on_no_next_token(
+        self, observer: "GmailObserver", mock_gmail: MagicMock, mock_db: MagicMock,
+    ) -> None:
+        """sync_full se termine apres la premiere page si pas de nextPageToken."""
+        mock_gmail.list_messages.return_value = ([{"id": "msg_1"}], None)
+        observer._ingest_one = MagicMock(return_value=True)
+
+        ingested = observer.sync_full(max_results=10)
+        assert ingested == 1
+        assert mock_gmail.list_messages.call_count == 1
+
+    def test_sync_full_safety_max_pages(
+        self, observer: "GmailObserver", mock_gmail: MagicMock, mock_db: MagicMock,
+    ) -> None:
+        """sync_full s'arrete au safety_max_pages pour eviter boucle infinie."""
+        # Simuler 200 appels qui retournent toujours un token
+        mock_gmail.list_messages.return_value = ([{"id": "msg_x"}], "next")
+        observer._ingest_one = MagicMock(return_value=True)
+
+        ingested = observer.sync_full(max_results=10)
+        # Max 100 pages (safety)
+        assert mock_gmail.list_messages.call_count <= 100
+        # Warning dans les logs, mais on n'a pas plante
 
 
 class TestGmailObserverHealth:

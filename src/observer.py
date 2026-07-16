@@ -373,7 +373,11 @@ class GmailObserver:
     def sync_full(self, max_results: int = 2000,
                   query: str = "newer_than:6m -label:spam -label:promotions"
                   ) -> int:
-        """Synchronisation complète des 6 derniers mois.
+        """Synchronisation complète (6 mois par défaut au 1er lancement).
+
+        Consomme TOUS les `nextPageToken` jusqu'à exhaustion de la
+        pagination. A chaque page, ingère les messages, marque le
+        progress dans sync_state.
 
         Returns: nombre d'emails ingérés
         """
@@ -382,25 +386,36 @@ class GmailObserver:
 
         ingested = 0
         page_token: Optional[str] = None
+        page_count = 0
+        safety_max_pages = 100  # garde-fou anti-boucle infinie
 
-        while True:
+        while page_count < safety_max_pages:
             self.circuit_breaker.can_proceed()
             self.circuit_breaker.register_call("messages.list")
+            page_count += 1
 
-            # Appel API (à mocker dans les tests)
-            messages = self.gmail_client.list_messages(
-                query=query, max_results=max_results,
+            # Appel API avec pagination
+            messages, next_token = self.gmail_client.list_messages(
+                query=query, max_results=max_results, page_token=page_token,
             )
+
+            logger.info("sync_full page %d: %d messages (next_token=%s)",
+                       page_count, len(messages),
+                       "yes" if next_token else "no")
 
             # Ingère chaque message
             for msg in messages:
                 if self._ingest_one(msg["id"]):
                     ingested += 1
 
-            # Pagination : on continue tant qu'il y a un nextPageToken
-            page_token = messages  # dans la vraie API, on a nextPageToken
-            # (le wrapper actuel n'expose pas le page_token, à étendre)
-            break  # simplification pour l'instant
+            # Pagination : continuer si nextPageToken
+            if not next_token:
+                break
+            page_token = next_token
+
+        if page_count >= safety_max_pages:
+            logger.warning("sync_full stopped at safety_max_pages=%d, "
+                          "il y a probablement plus de pages", safety_max_pages)
 
         # Marquer dans sync_state
         self.update_sync_state(
@@ -408,7 +423,8 @@ class GmailObserver:
             mark_full_sync=True,
             mark_success=True,
         )
-        logger.info("sync_full done: %d emails ingested", ingested)
+        logger.info("sync_full done: %d emails ingested across %d pages",
+                   ingested, page_count)
         return ingested
 
     # ----------------------------------------------------------------

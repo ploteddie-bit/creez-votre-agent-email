@@ -350,13 +350,38 @@ async def approve_decision(decision_id: int) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE decision_journal SET user_approved = TRUE, "
-                "executed_at = NOW() WHERE id = %s RETURNING email_id, executable_operation",
+                "executed_at = NOW() WHERE id = %s "
+                "RETURNING email_id, executable_operation",
                 (decision_id,),
             )
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(404, f"decision {decision_id} not found")
         conn.commit()
+
+    # A3 : Tracking corrections (reset du compteur de rejections consecutives)
+    try:
+        from src.decider import Decider
+        decider = Decider()
+        decider.record_user_correction(
+            email_id=row[0],
+            action_type=row[1],
+            was_correct=True,
+        )
+    except Exception as e:
+        # Ne pas bloquer l'approbation si le tracking echoue
+        import logging
+        logging.getLogger(__name__).debug("record_user_correction failed: %s", e)
+
+    # A4 : Si executable_operation != 'none', enqueue l'action
+    if row[1] != "none":
+        try:
+            from src.action_worker import ActionWorker
+            aw = ActionWorker()
+            aw.enqueue_action(email_id=row[0], operation=row[1])
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("enqueue_action failed: %s", e)
 
     # Broadcast WebSocket
     await ws_manager.broadcast("decision_approved", {
@@ -377,13 +402,26 @@ async def reject_decision(decision_id: int) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE decision_journal SET user_approved = FALSE WHERE id = %s "
-                "RETURNING email_id",
+                "RETURNING email_id, executable_operation",
                 (decision_id,),
             )
             row = cur.fetchone()
             if row is None:
                 raise HTTPException(404, f"decision {decision_id} not found")
         conn.commit()
+
+    # A3 : Tracking corrections (incremente le compteur)
+    try:
+        from src.decider import Decider
+        decider = Decider()
+        decider.record_user_correction(
+            email_id=row[0],
+            action_type=row[1],
+            was_correct=False,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug("record_user_correction failed: %s", e)
 
     await ws_manager.broadcast("decision_rejected", {
         "decision_id": decision_id,

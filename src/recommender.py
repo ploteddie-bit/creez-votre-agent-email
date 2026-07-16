@@ -421,11 +421,27 @@ class Recommender:
 # === Fonction helper pour le pipeline ===
 
 def process_new_emails(batch_size: int = 50) -> int:
-    """Traite les emails qui n'ont pas encore de decision (P0 -> P1).
+    """Traite les emails qui n'ont pas encore de decision (P0 -> P1 -> P2?).
+
+    Pour chaque email sans decision :
+      1. Appelle Recommender.recommend() pour obtenir une MailDecision
+      2. Si P2 active et garde-fous OK, appelle Decider.auto_execute()
+         qui enqueue l'action dans action_queue
 
     Returns: nombre d'emails traites.
     """
     rec = Recommender()
+
+    # Lazy import du Decider (evite cycle)
+    decider = None
+    settings = get_settings()
+    if settings.p2.enabled:
+        try:
+            from src.decider import Decider
+            decider = Decider()
+        except Exception as e:
+            logger.warning("Decider init failed, P2 auto-execute disabled: %s", e)
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -443,22 +459,37 @@ def process_new_emails(batch_size: int = 50) -> int:
     if not ids:
         return 0
 
-    # Charger les emails
-    from src.models import EmailInDB
+    # Charger les emails complets (pour le Decider qui a besoin de body/subject)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, sender_email, sender_domain, subject, body_snippet "
+                "SELECT id, sender_email, sender_domain, subject, body_snippet, "
+                "       body_text, labels "
                 "FROM emails WHERE id = ANY(%s)",
                 (ids,),
             )
             cols = [d[0] for d in cur.description]
             emails = [dict(zip(cols, row)) for row in cur.fetchall()]
 
+    p2_executed = 0
     for email in emails:
         try:
-            rec.recommend(email)
+            decision = rec.recommend(email)
+
+            # A4 : Si P2 active, essayer d'auto-executer
+            if decider is not None and decision.executable_operation != "none":
+                queue_id = decider.auto_execute(
+                    email_id=email["id"],
+                    mail_decision=decision,
+                    email=email,
+                )
+                if queue_id:
+                    p2_executed += 1
         except Exception as e:
             logger.error("failed to recommend %s: %s", email.get("id"), e)
+
+    if p2_executed:
+        logger.info("P2 auto-executed %d/%d actions in this batch",
+                   p2_executed, len(emails))
 
     return len(emails)
