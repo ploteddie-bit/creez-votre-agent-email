@@ -370,10 +370,21 @@ class GmailObserver:
     # ----------------------------------------------------------------
     # Sync full (premier lancement ou fallback)
     # ----------------------------------------------------------------
+    INITIAL_SYNC_QUERY = "newer_than:6m -label:spam -label:promotions"
+    # Fallback après expiration d'historyId : Gmail expire les historyId
+    # après ~7 jours — re-ingérer 6 mois saturerait le quota pour rien.
+    FALLBACK_SYNC_QUERY = "newer_than:7d -label:spam -label:promotions"
+
     def sync_full(self, max_results: int = 2000,
-                  query: str = "newer_than:6m -label:spam -label:promotions"
+                  query: Optional[str] = None,
+                  *, fallback: bool = False,
                   ) -> int:
-        """Synchronisation complète (6 mois par défaut au 1er lancement).
+        """Synchronisation complète.
+
+        - Premier lancement (défaut) : 6 mois d'historique
+          (`INITIAL_SYNC_QUERY`).
+        - Fallback après expiration d'historyId (`fallback=True`) :
+          7 jours seulement (`FALLBACK_SYNC_QUERY`) — REVIEW §1.4.
 
         Consomme TOUS les `nextPageToken` jusqu'à exhaustion de la
         pagination. A chaque page, ingère les messages, marque le
@@ -381,6 +392,8 @@ class GmailObserver:
 
         Returns: nombre d'emails ingérés
         """
+        if query is None:
+            query = self.FALLBACK_SYNC_QUERY if fallback else self.INITIAL_SYNC_QUERY
         logger.info("starting sync_full (max_results=%d, query=%s)", max_results, query)
         self.circuit_breaker.can_proceed()
 
@@ -483,6 +496,27 @@ class GmailObserver:
         logger.info("sync_delta done: %d messages, new historyId=%s",
                     ingested, max_history_id)
         return ingested
+
+    # ----------------------------------------------------------------
+    # Sync intelligente (point d'entrée recommandé)
+    # ----------------------------------------------------------------
+    def sync(self) -> int:
+        """Delta si possible, fallback 7 jours si l'historyId a expiré.
+
+        C'est le point d'entrée à utiliser par le daemon et les
+        endpoints : il encapsule la gestion du 404 Gmail
+        (`HistoryExpired`) au lieu de laisser l'exception remonter
+        (REVIEW §1.4 — panne serveur > 7 jours).
+
+        Returns: nombre d'emails traités
+        """
+        try:
+            return self.sync_delta()
+        except HistoryExpired:
+            logger.warning(
+                "historyId expiré → sync_full en mode fallback (7 jours)"
+            )
+            return self.sync_full(fallback=True)
 
     # ----------------------------------------------------------------
     # Ingestion d'un message individuel

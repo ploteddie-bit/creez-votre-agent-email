@@ -111,6 +111,25 @@ class RulesEngine:
         is_spam = "spam" in labels
         is_critical_domain = sender_domain in CRITICAL_DOMAINS
 
+        # Regle 0 (NOUVELLE - quick win audit) : Piece jointe volumineuse
+        # non classee manuellement -> move_ia_review. Regle de securite
+        # absolue : aucune PJ non vue ne peut etre auto-classifiee.
+        # Prend le pas sur les regles soft, mais reste apres les mots-cles.
+        has_attachments = bool(email.get("has_attachments"))
+        attachment_size_kb = int(email.get("attachment_size_kb") or 0)
+        attachment_large_unanalyzed = (
+            has_attachments and attachment_size_kb > 10
+            and not email.get("user_classified")
+        )
+        if attachment_large_unanalyzed and not has_critical:
+            return RuleResult(
+                action=RuleAction.MOVE_IA_REVIEW,
+                confidence=RuleConfidence.HIGH,
+                rule_name="large_attachment_unclassified",
+                matched_keywords=[],
+                sender_domain=sender_domain,
+            )
+
         # Règle 5 : spam → mark_read
         if is_spam:
             return RuleResult(

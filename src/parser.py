@@ -192,14 +192,15 @@ def decode_base64url(data: str) -> str:
 
 
 def decode_bytes_smart(raw: bytes) -> str:
-    """Décode des bytes en texte avec détection d'encodage (REVIEW §1.3).
+    """Décode des bytes en texte avec gestion des vieux encodages (REVIEW §1.3).
 
-    Stratégie :
+    Stratégie en cascade — jamais d'exception, jamais de crash du
+    pipeline sur un mail mal encodé :
       1. UTF-8 strict — le cas nominal moderne.
-      2. `chardet.detect()` si UTF-8 échoue et confiance >= 0.7
-         (vieux mails français en ISO-8859-1 / Windows-1252).
-      3. Fallback UTF-8 avec remplacement — jamais d'exception,
-         jamais de crash du pipeline sur un mail mal encodé.
+      2. `chardet.detect()` si confiance >= 0.5 (encodages exotiques).
+      3. Windows-1252 — superset d'ISO-8859-1, standard de fait des
+         vieux mails européens ; décode tout octet (jamais d'échec).
+      4. UTF-8 avec remplacement (dernier recours défensif).
     """
     try:
         return raw.decode("utf-8")
@@ -211,12 +212,17 @@ def decode_bytes_smart(raw: bytes) -> str:
         guess = chardet.detect(raw)
         encoding = guess.get("encoding")
         confidence = guess.get("confidence") or 0.0
-        if encoding and confidence >= 0.7:
+        if encoding and confidence >= 0.5:
             logger.debug("encoding detected: %s (%.2f)", encoding, confidence)
             return raw.decode(encoding, errors="replace")
     except Exception as e:
         logger.debug("chardet detection failed: %s", e)
-    return raw.decode("utf-8", errors="replace")
+    try:
+        # Non-UTF-8 européen classique : cp1252 couvre ISO-8859-1 +
+        # les guillemets/tirets typographiques Windows
+        return raw.decode("cp1252", errors="replace")
+    except Exception:
+        return raw.decode("utf-8", errors="replace")
 
 
 def extract_text_from_payload(payload: dict) -> tuple[str, str]:

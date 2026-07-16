@@ -239,9 +239,9 @@ class Decider:
                     (action_type, self.window_size),
                 )
                 row = cur.fetchone()
-                if row is None or row[2] == 0:
+                if row is None or len(row) < 3 or row[2] == 0:
                     return 1.0  # cold start : on laisse passer
-                approved, rejected, total = row
+                approved, rejected, total = row[0], row[1], row[2]
                 if (approved + rejected) == 0:
                     return 1.0
                 return approved / (approved + rejected)
@@ -270,9 +270,11 @@ class Decider:
                         (action, self.window_size),
                     )
                     row = cur.fetchone()
-                    if row is None:
-                        continue
-                    approved, rejected, pending = row
+                    if row is None or len(row) < 3:
+                        # Cold start : pas encore de donnees pour cette action
+                        approved, rejected, pending = 0, 0, 0
+                    else:
+                        approved, rejected, pending = row[0], row[1], row[2]
                     total = approved + rejected
                     precision = (approved / total) if total > 0 else 1.0
                     threshold = self.precision_thresholds.get(action, 0.95)

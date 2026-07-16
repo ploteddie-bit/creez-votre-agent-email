@@ -13,6 +13,10 @@ def mock_db(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Mock complet de get_connection (pas de vraie DB)."""
     import src.db as db_mod
     import src.observer as obs_mod
+    import src.decider as dec_mod
+    import src.search as search_mod
+    import src.recommender as rec_mod
+    import src.action_worker as aw_mod
 
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
@@ -27,8 +31,8 @@ def mock_db(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     ctx = MagicMock()
     ctx.__enter__.return_value = mock_conn
     ctx.__exit__.return_value = False
-    monkeypatch.setattr(db_mod, "get_connection", lambda *a, **kw: ctx)
-    monkeypatch.setattr(obs_mod, "get_connection", lambda *a, **kw: ctx)
+    for mod in (db_mod, obs_mod, dec_mod, search_mod, rec_mod, aw_mod):
+        monkeypatch.setattr(mod, "get_connection", lambda *a, **kw: ctx)
     return mock_cursor
 
 
@@ -183,6 +187,111 @@ class TestConfigEndpoint:
 # Tests : pages statiques
 # ============================================================
 
+class TestStatsEndpoint:
+    """Tests de l'endpoint /api/stats."""
+
+    def test_stats_returns_dict(self, client: TestClient) -> None:
+        r = client.get("/api/stats")
+        assert r.status_code == 200
+        data = r.json()
+        assert "days" in data
+        assert "repartition_actions" in data
+        assert "top_senders" in data
+        assert "actions_par_jour" in data
+        assert "counters" in data
+
+    def test_stats_default_window_30_days(self, client: TestClient) -> None:
+        r = client.get("/api/stats")
+        assert r.json()["days"] == 30
+
+    def test_stats_custom_window(self, client: TestClient) -> None:
+        r = client.get("/api/stats?days=7")
+        assert r.json()["days"] == 7
+
+    def test_stats_window_validation(self, client: TestClient) -> None:
+        """days > 365 doit etre refuse."""
+        r = client.get("/api/stats?days=1000")
+        assert r.status_code == 422
+
+
+class TestLearningEndpoint:
+    """Tests de l'endpoint /api/learning."""
+
+    def test_learning_returns_dict(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Mock Decider pour eviter les queries SQL
+        from src.decider import Decider
+        mock_decider = MagicMock()
+        mock_decider.get_window_stats.return_value = {
+            "archive": {"precision": 0.95, "threshold": 0.95, "approved": 10,
+                       "rejected": 1, "pending": 0, "above_threshold": True,
+                       "consecutive_rejections": 0},
+        }
+        mock_decider.p2_enabled = False
+        monkeypatch.setattr(Decider, "get_window_stats", mock_decider.get_window_stats)
+        r = client.get("/api/learning")
+        assert r.status_code == 200
+        data = r.json()
+        assert "window" in data
+        assert "window_stats" in data
+        assert "top_domains_appris" in data
+        assert "progression_p2" in data
+
+    def test_learning_progression_p2_safe_default(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Par defaut, P2 est off, kill_switch ON."""
+        from src.decider import Decider
+        mock_decider = MagicMock()
+        mock_decider.get_window_stats.return_value = {}
+        mock_decider.p2_enabled = False
+        monkeypatch.setattr(Decider, "get_window_stats", mock_decider.get_window_stats)
+        r = client.get("/api/learning")
+        prog = r.json()["progression_p2"]
+        assert prog["p2_enabled"] is False
+
+
+class TestSearchEndpoint:
+    """Tests de l'endpoint /api/emails/search."""
+
+    def test_search_requires_query(self, client: TestClient) -> None:
+        """Une query vide doit etre refusee (min_length=1)."""
+        r = client.get("/api/emails/search")
+        assert r.status_code == 422
+
+    def test_search_returns_results(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Mock HybridSearch pour eviter la query SQL
+        from src.search import HybridSearch
+        mock_hs = MagicMock()
+        mock_hs.fulltext_search.return_value = [
+            {"email_id": "msg_1", "subject": "Facture EDF",
+             "sender_email": "edf@example.com", "rank": 0.5},
+        ]
+        monkeypatch.setattr(HybridSearch, "fulltext_search", mock_hs.fulltext_search)
+        r = client.get("/api/emails/search?q=facture")
+        assert r.status_code == 200
+        data = r.json()
+        assert "query" in data
+        assert "results" in data
+        assert "count" in data
+        assert data["count"] >= 0
+
+
+class TestRationaleInDecisions:
+    """Chaque decision expose un rationale lisible."""
+
+    def test_decision_has_rationale(self, client: TestClient) -> None:
+        r = client.get("/api/decisions")
+        assert r.status_code == 200
+        items = r.json()["items"]
+        # Si on a des decisions, chacune doit avoir un rationale
+        for item in items:
+            assert "rationale" in item, f"missing rationale in {item}"
+
+
 class TestStaticPages:
     def test_index_page(self, client: TestClient) -> None:
         r = client.get("/")
@@ -206,6 +315,22 @@ class TestStaticPages:
         r = client.get("/this-page-does-not-exist-xyz")
         # Le middleware peut renvoyer 404 ou redirect, on accepte les 2
         assert r.status_code in (200, 404)
+
+    def test_prompts_page_serves_real_html(self, client: TestClient) -> None:
+        """/prompts sert prompts.html (et non le fallback meta-refresh)."""
+        r = client.get("/prompts")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        # Le fichier prompts.html existe et contient du vrai contenu
+        # (pas la page de fallback meta-refresh).
+        assert "meta http-equiv" not in r.text
+
+    def test_plan_page_serves_real_html(self, client: TestClient) -> None:
+        """/plan sert plan.html (et non le fallback meta-refresh)."""
+        r = client.get("/plan")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "meta http-equiv" not in r.text
 
 
 # ============================================================

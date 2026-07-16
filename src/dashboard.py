@@ -143,6 +143,19 @@ async def add_csp(request: Request, call_next):
     return response
 
 
+# Sert les assets statiques (JS/CSS des pages dashboard) sous /static/.
+# Doit etre monte APRES les routes HTML ci-dessous pour ne pas les masquer :
+# FastAPI resout les routes dans l'ordre d'enregistrement, mais les routes
+# @app.get explicites sont toujours prioritaires sur le mount StaticFiles
+# car elles sont ajoutees avant. On le monte ici (avant la premiere route HTML)
+# pour disponibilite, et les routes nommees restent prioritaires.
+app.mount(
+    "/static",
+    StaticFiles(directory=str(STATIC_DIR)),
+    name="static",
+)
+
+
 # === Endpoints : sante ===
 
 @app.get("/api/health", tags=["health"])
@@ -255,6 +268,30 @@ async def list_emails(
     }
 
 
+@app.get("/api/emails/search", tags=["emails"])
+async def search_emails(
+    q: str = Query(..., min_length=1, max_length=500,
+                  description="Texte a chercher (full-text)"),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    """Recherche full-text dans les emails (tsvector FR).
+
+    NOTE : cette route DOIT etre definie AVANT /api/emails/{email_id}, sinon
+    FastAPI capture "search" comme un email_id (les routes statiques sont
+    matchees avant les routes parametrees lors de la resolution).
+    """
+    from src.search import HybridSearch
+
+    hs = HybridSearch()
+    results = hs.fulltext_search(q, limit=limit)
+
+    return {
+        "query": q,
+        "count": len(results),
+        "results": results,
+    }
+
+
 @app.get("/api/emails/{email_id}", tags=["emails"])
 async def get_email(email_id: str) -> dict[str, Any]:
     """Detail d'un email + emails similaires."""
@@ -284,6 +321,158 @@ async def get_email(email_id: str) -> dict[str, Any]:
     return {
         "email": _jsonify_email(email, full=True),
         "decisions": [_jsonify_decision(d) for d in decisions],
+    }
+
+
+# === Endpoints : stats ===
+
+@app.get("/api/stats", tags=["stats"])
+async def get_stats(days: int = Query(30, ge=1, le=365)) -> dict[str, Any]:
+    """Statistiques agregees sur N jours.
+
+    - repartition_actions : count par executable_operation (decision_journal)
+    - top_senders : top 10 expediteurs par volume
+    - actions_par_jour : count par jour
+    - counters : compteurs globaux
+    """
+    from src.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # 1. Repartition des actions (decision_journal)
+            cur.execute(
+                """
+                SELECT executable_operation, COUNT(*) AS count
+                FROM decision_journal
+                WHERE created_at >= NOW() - (%s || ' days')::INTERVAL
+                GROUP BY executable_operation
+                ORDER BY count DESC
+                """,
+                (str(days),),
+            )
+            repartition_actions = {
+                row[0]: row[1] for row in cur.fetchall()
+            }
+
+            # 2. Top 10 expediteurs par volume
+            cur.execute(
+                """
+                SELECT sender_email, sender_domain, COUNT(*) AS count
+                FROM emails
+                WHERE date_received >= NOW() - (%s || ' days')::INTERVAL
+                GROUP BY sender_email, sender_domain
+                ORDER BY count DESC
+                LIMIT 10
+                """,
+                (str(days),),
+            )
+            top_senders = [
+                {"sender_email": r[0], "sender_domain": r[1], "count": r[2]}
+                for r in cur.fetchall()
+            ]
+
+            # 3. Actions par jour (30 derniers jours)
+            cur.execute(
+                """
+                SELECT DATE(created_at) AS day, COUNT(*) AS count
+                FROM decision_journal
+                WHERE created_at >= NOW() - (%s || ' days')::INTERVAL
+                GROUP BY DATE(created_at)
+                ORDER BY day ASC
+                """,
+                (str(days),),
+            )
+            actions_par_jour = [
+                {"day": r[0].isoformat(), "count": r[1]}
+                for r in cur.fetchall()
+            ]
+
+            # 4. Compteurs globaux
+            cur.execute("SELECT COUNT(*) FROM emails")
+            total_emails = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM decision_journal")
+            total_decisions = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM action_queue WHERE status='done'")
+            total_actions_done = cur.fetchone()[0]
+
+    return {
+        "days": days,
+        "repartition_actions": repartition_actions,
+        "top_senders": top_senders,
+        "actions_par_jour": actions_par_jour,
+        "counters": {
+            "total_emails": total_emails,
+            "total_decisions": total_decisions,
+            "total_actions_done": total_actions_done,
+        },
+    }
+
+
+# === Endpoints : learning ===
+
+@app.get("/api/learning", tags=["learning"])
+async def get_learning(window: int = Query(100, ge=10, le=1000)) -> dict[str, Any]:
+    """Metriques d'apprentissage P1/P2.
+
+    - precision_par_action : ratio approved/rejected sur la fenetre
+    - top_domains_appris : domaines avec le plus d'actions archive
+    - progression_p2 : est-on pres des seuils ?
+    - consecutive_rejections : actions temporairement desactivees
+    """
+    from src.decider import Decider
+    from src.db import get_connection
+
+    # Precision par action via Decider
+    decider = Decider()
+    window_stats = decider.get_window_stats()
+
+    # Top domaines appris (domaines avec le plus d'emails archives)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT sender_domain, COUNT(*) AS archived_count
+                FROM emails
+                WHERE is_archived = TRUE
+                  AND sender_domain IS NOT NULL
+                GROUP BY sender_domain
+                ORDER BY archived_count DESC
+                LIMIT 10
+                """,
+            )
+            top_domains_appris = [
+                {"domain": r[0], "archived_count": r[1]}
+                for r in cur.fetchall()
+            ]
+
+            # Progression P2 (combien de decisions valides)
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE user_approved = TRUE) AS approved,
+                    COUNT(*) FILTER (WHERE user_approved = FALSE) AS rejected
+                FROM decision_journal
+                WHERE phase IN ('P1', 'P2')
+                  AND created_at >= NOW() - INTERVAL '30 days'
+                """
+            )
+            row = cur.fetchone()
+            approved = row[0] if row and len(row) > 0 and row[0] else 0
+            rejected = row[1] if row and len(row) > 1 and row[1] else 0
+            total = approved + rejected
+            overall_precision = (approved / total) if total > 0 else 1.0
+
+    return {
+        "window": window,
+        "window_stats": window_stats,
+        "top_domains_appris": top_domains_appris,
+        "progression_p2": {
+            "approved_30d": approved,
+            "rejected_30d": rejected,
+            "overall_precision_30d": round(overall_precision, 3),
+            "p2_enabled": decider.p2_enabled,
+            "kill_switch": decider.is_kill_switch_on() if hasattr(decider, "is_kill_switch_on") else (not decider.p2_enabled),
+        },
     }
 
 
@@ -543,6 +732,18 @@ async def cours_page() -> HTMLResponse:
     return HTMLResponse(_read_static("cours-agent-mail-24-7.html"))
 
 
+@app.get("/prompts", response_class=HTMLResponse, include_in_schema=False)
+async def prompts_page() -> HTMLResponse:
+    """Page des prompts par subagent (referencée dans la navigation)."""
+    return HTMLResponse(_read_static("prompts.html"))
+
+
+@app.get("/plan", response_class=HTMLResponse, include_in_schema=False)
+async def plan_page() -> HTMLResponse:
+    """Page du plan d'action (referencée dans la navigation)."""
+    return HTMLResponse(_read_static("plan.html"))
+
+
 # === Helpers ===
 
 def _read_static(filename: str) -> str:
@@ -575,7 +776,41 @@ def _jsonify_email(row: dict, *, full: bool = False) -> dict[str, Any]:
 
 
 def _jsonify_decision(row: dict) -> dict[str, Any]:
-    return _jsonify_email(row)
+    """Convertit une decision en JSON-safe + ajoute un rationale lisible."""
+    from src.rationale import build_rationale
+    from src.models import MailDecision
+
+    out = _jsonify_email(row)
+
+    # Extraire le rule_name du reason si applicable (format "rule:NAME")
+    reason = row.get("reason") or ""
+    rule_name = None
+    if reason.startswith("rule:"):
+        rule_name = reason[5:].split("|")[0].strip()
+
+    # Reconstruire une MailDecision partielle pour le rationale
+    try:
+        decision = MailDecision(
+            classification=row.get("classification", "unknown"),
+            executable_operation=row.get("executable_operation", "none"),
+            recommended_user_action=row.get("recommended_user_action", "none"),
+            confidence=row.get("final_confidence") or row.get("llm_confidence") or 0.0,
+            reason=reason,
+        )
+        out["rationale"] = build_rationale(
+            decision,
+            rule_name=rule_name,
+            sender_domain=row.get("sender_domain"),
+            similar_count=0,  # pas stocke, on approxime
+        )
+    except Exception:
+        # Fallback : rationale minimal
+        out["rationale"] = (
+            f"Decision: {out.get('executable_operation', 'none')} "
+            f"({out.get('classification', 'unknown')}, "
+            f"conf={out.get('final_confidence', 0):.0%})"
+        )
+    return out
 
 
 # === Entry point pour uvicorn ===

@@ -200,3 +200,60 @@ def test_parse_email_unread_label() -> None:
     raw = make_minimal_raw(label_ids=["INBOX", "UNREAD"])
     parsed = parse_raw_message(raw)
     assert parsed["is_read"] is False
+
+
+# ============================================================
+# B3 : encodage MIME robuste (REVIEW §1.3)
+# ============================================================
+
+_FRENCH_TEXT = (
+    "Votre échéance de paiement est prévue à la fin du mois. "
+    "Merci de vérifier votre compte."
+)
+
+
+def test_decode_bytes_smart_utf8_passthrough() -> None:
+    """UTF-8 valide : décodage strict, aucune détection nécessaire."""
+    from src.parser import decode_bytes_smart
+    raw = _FRENCH_TEXT.encode("utf-8")
+    assert decode_bytes_smart(raw) == _FRENCH_TEXT
+
+
+def test_decode_bytes_smart_iso_8859_1() -> None:
+    """Un vieux mail en ISO-8859-1 ressort proprement (pas de �)."""
+    from src.parser import decode_bytes_smart
+    raw = _FRENCH_TEXT.encode("iso-8859-1")
+    out = decode_bytes_smart(raw)
+    assert "échéance" in out
+    assert "prévue" in out
+    assert "\ufffd" not in out
+
+
+def test_decode_bytes_smart_windows_1252() -> None:
+    """Windows-1252 (guillemets typographiques) décodé correctement."""
+    from src.parser import decode_bytes_smart
+    text = "« Devis » — échéance immédiate, paiement à réception."
+    raw = text.encode("cp1252")
+    out = decode_bytes_smart(raw)
+    assert "échéance" in out
+    assert "—" in out
+    assert "\ufffd" not in out
+
+
+def test_decode_base64url_latin1_body() -> None:
+    """Le pipeline base64url Gmail + latin-1 produit du texte propre."""
+    import base64
+    from src.parser import decode_base64url
+    raw = _FRENCH_TEXT.encode("iso-8859-1")
+    b64 = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+    out = decode_base64url(b64)
+    assert "échéance" in out
+    assert "\ufffd" not in out
+
+
+def test_decode_bytes_smart_never_raises() -> None:
+    """Même du binaire aléatoire ne lève pas d'exception."""
+    import os
+    from src.parser import decode_bytes_smart
+    out = decode_bytes_smart(os.urandom(256))
+    assert isinstance(out, str)
