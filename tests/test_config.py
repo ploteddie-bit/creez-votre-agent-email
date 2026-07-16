@@ -81,3 +81,22 @@ def test_kill_switch_default_on() -> None:
                      "vacation_mode": False})
     # Sans variable d'env, et P2 désactivé → kill-switch considéré ON
     assert s.is_kill_switch_on() is True
+
+
+def test_env_var_overrides_yaml_via_from_yaml(tmp_path: Path) -> None:
+    """Régression : via from_yaml, l'env doit AUSSI primer sur le YAML.
+
+    pydantic-settings donne par défaut la priorité aux kwargs d'init
+    (donc au YAML) — `settings_customise_sources` inverse cet ordre
+    pour que EMAIL_LEARNER_* surcharge toujours la config fichier.
+    """
+    from src.config import Settings
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("p2:\n  enabled: false\n", encoding="utf-8")
+    os.environ["EMAIL_LEARNER_P2__ENABLED"] = "true"
+    try:
+        s = Settings.from_yaml(path=config_file)
+        assert s.p2.enabled is True
+    finally:
+        del os.environ["EMAIL_LEARNER_P2__ENABLED"]

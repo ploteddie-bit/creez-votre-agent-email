@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from pathlib import Path
+import os
 from typing import TYPE_CHECKING, Iterator
 
-from src.config import get_settings
+from src.config import ENV_FILE, get_settings
 
 # Imports lourds placés en lazy pour permettre les tests unitaires
 # qui n'ont pas besoin de PostgreSQL
@@ -41,7 +41,7 @@ def get_connection(
       (utile pour les scripts de maintenance).
     """
     settings = get_settings()
-    pwd = Path(".env").exists() and _read_env_var("EMAIL_LEARNER_DB_PASSWORD") or None
+    pwd = _read_env_var("EMAIL_LEARNER_DB_PASSWORD")
     import psycopg2  # lazy import
     conn = psycopg2.connect(settings.postgres.dsn(password=pwd))
     conn.autocommit = autocommit
@@ -56,18 +56,23 @@ def get_connection(
 
 
 def _read_env_var(name: str) -> str | None:
-    """Lit une variable depuis le fichier .env (sans dépendance externe)."""
-    import os
-    env_path = Path(".env")
-    if not env_path.exists():
-        return os.environ.get(name)
-    for line in env_path.read_text(encoding="utf-8").splitlines():
+    """Lit une variable : environnement réel d'abord, puis `configs/.env`.
+
+    Cohérent avec pydantic-settings (qui lit `configs/.env` via
+    `ENV_FILE`) : l'ancienne version cherchait un `.env` dans le
+    répertoire courant, que le projet n'utilise pas.
+    """
+    if (val := os.environ.get(name)) is not None:
+        return val
+    if not ENV_FILE.exists():
+        return None
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
         if line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
         if k.strip() == name:
             return v.strip().strip('"').strip("'")
-    return os.environ.get(name)
+    return None
 
 
 def healthcheck() -> bool:

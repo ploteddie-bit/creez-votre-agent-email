@@ -22,7 +22,11 @@ from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # === Chemins résolus une fois pour toutes ===
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
@@ -202,11 +206,30 @@ class Settings(BaseSettings):
     dashboard: DashboardSettings = Field(default_factory=DashboardSettings)
 
     @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Ordonne les sources : l'environnement prime sur le YAML.
+
+        Par défaut, pydantic-settings donne la priorité aux kwargs
+        d'init (donc au YAML chargé par `from_yaml`) sur les variables
+        d'environnement. On inverse pour que `EMAIL_LEARNER_*`
+        (variables réelles ou `configs/.env`) puisse toujours
+        surcharger la config YAML — y compris le kill-switch P2.
+        """
+        return (env_settings, dotenv_settings, init_settings, file_secret_settings)
+
+    @classmethod
     def from_yaml(cls, path: Path | str | None = None) -> "Settings":
         """Charge la config depuis YAML + environnement.
 
         Les variables d'environnement `EMAIL_LEARNER_*` prennent
-        priorité sur le YAML (comportement pydantic-settings).
+        priorité sur le YAML (voir `settings_customise_sources`).
         """
         config_path = Path(path) if path else CONFIG_FILE
         data: dict[str, Any] = {}
