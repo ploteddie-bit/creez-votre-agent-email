@@ -174,6 +174,7 @@ _SQL_KEYWORDS_NOT_TABLES: frozenset[str] = frozenset({
     "with", "as", "case", "when", "then", "else", "end",
     "asc", "desc", "distinct", "all", "any", "exists", "between",
     "in", "is", "like", "ilike", "similar", "to",
+    "skip", "locked", "now", "current_timestamp",
 })
 
 
