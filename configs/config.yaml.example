@@ -1,0 +1,74 @@
+# =====================================================
+# Agent Mail 24/7 — configuration applicative
+# Copier ce template en `configs/config.yaml` puis adapter
+# =====================================================
+
+environment: development
+debug: false
+
+# --- PostgreSQL + pgvector -------------------------
+postgres:
+  host: 10.0.0.XXX
+  port: 5432
+  database: email_learner
+  user: email_learner_app
+  sslmode: require        # disable | require | verify-ca | verify-full
+
+# --- Ollama (LLM + embeddings local) ---------------
+ollama:
+  base_url: http://10.0.0.XXX:11434
+  embedding_model: bge-m3
+  llm_model: llama3.1:8b        # Alternatives : mistral:7b, phi4:14b, qwen2.5:7b
+  timeout_seconds: 30
+  embedding_dimension: 1024
+
+# --- Polling Gmail ---------------------------------
+polling:
+  interval_seconds: 60
+  batch_size: 100
+  sync_window_months: 6
+
+# --- Sandbox Firecracker ---------------------------
+sandbox:
+  timeout_seconds: 30
+  vm_pool_min: 3
+  vm_pool_max: 5
+  max_attachment_size_mb: 5
+  base64_mass_threshold_pct: 50
+
+# --- Phase P2 (autonomie) --------------------------
+p2:
+  enabled: false              # Kill-switch global — toujours false au démarrage
+  max_daily_actions: 20
+  window_size: 100
+  precision_thresholds:
+    archive: 0.95
+    mark_read: 0.90
+    star: 0.85
+    move_ia_review: 0.80
+  vacation_mode: false
+
+# --- Gmail API (allowlist + interdictions) ---------
+gmail:
+  oauth_scopes:
+    - https://www.googleapis.com/auth/gmail.modify
+  forbidden_methods:           # NE JAMAIS RETIRER de cette liste
+    - users.messages.delete
+    - users.threads.delete
+    - users.messages.send
+    - users.drafts.send
+  quota_costs:                 # Coût en unités Gmail par appel
+    history.list: 2000
+    messages.get: 2000
+    messages.modify: 2000
+    watch: 2000
+  quota_per_user_per_day: 1000000000
+  quota_threshold_pct: 0.8     # Pause si > 80% du quota
+  max_messages_per_minute: 100
+
+# --- Dashboard HTTPS -------------------------------
+dashboard:
+  bind_host: 10.0.0.XXX        # JAMAIS 0.0.0.0
+  bind_port: 8000
+  caddy_https_port: 8080
+  csp: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"

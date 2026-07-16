@@ -1,0 +1,113 @@
+# ─── Python ──────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.cache
+*.swp
+*.swo
+
+# ─── Environnements virtuels ────────────────────
+venv/
+env/
+.venv/
+env.bak/
+venv.bak/
+
+# ─── Distribution ───────────────────────────────
+build/
+dist/
+*.whl
+
+# ─── IDEs ───────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ─── Logs ───────────────────────────────────────
+*.log
+logs/
+*.log.*
+
+# ─── Secrets & config runtime ───────────────────
+.env
+.env.local
+.env.*.local
+configs/config.yaml
+configs/.env
+configs/gmail-credentials.json
+configs/token.json
+configs/*.secret
+configs/*.private
+
+# ─── Backups ────────────────────────────────────
+*.bak
+*.bak.*
+*.backup
+*.backv*
+*.tmp
+*.temp
+archive/
+
+# ─── Données locales (à adapter) ────────────────
+data/
+local_data/
+*.sqlite
+*.sqlite3
+*.db
+backups/
+pg_dumps/
+dumps/
+
+# ─── Modèles & artefacts lourds ─────────────────
+models/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+
+# ─── Build VM / Docker ──────────────────────────
+*.img
+*.iso
+*.qcow2
+*.vmdk
+*.ext4
+*.tar
+*.tar.gz
+*.zip
+*.7z
+
+# ─── Node (si on ajoute un front plus tard) ─────
+node_modules/
+.npm/
+.pnpm-store/
+.next/
+.nuxt/
+.vite/
+dist/
+
+# ─── OS ─────────────────────────────────────────
+.DS_Store
+desktop.ini
+
+# ─── Python tools caches ────────────────────────
+.pylint.d/
+.bandit/
+.benchmarks/
+.python-version
+.venv.bak/

@@ -1,0 +1,51 @@
+# =====================================================
+# Agent Mail 24/7 — dépendances Python
+# Cible : Python 3.11+
+# =====================================================
+
+# ── Gmail API ─────────────────────────────────────
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+
+# ── Base de données ───────────────────────────────
+psycopg2-binary>=2.9.9
+pgvector>=0.2.4
+SQLAlchemy>=2.0.25
+alembic>=1.13.0
+
+# ── Traitement des emails ─────────────────────────
+nh3>=0.2.15           # Sanitization HTML (binding Rust, maintenu)
+pypdf>=4.0.0          # Extraction texte PDF
+
+# ── IA locale ─────────────────────────────────────
+httpx>=0.26.0         # Client HTTP async pour Ollama
+
+# ── Dashboard ─────────────────────────────────────
+fastapi>=0.109.0
+uvicorn[standard]>=0.25.0
+jinja2>=3.1.2
+websockets>=12.0
+python-multipart>=0.0.6
+
+# ── Configuration & validation ────────────────────
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+pyyaml>=6.0.1
+bcrypt>=4.1.1
+
+# ── Observabilité ─────────────────────────────────
+structlog>=24.1.0
+
+# ── Tests (dev) ───────────────────────────────────
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+respx>=0.21.0         # Mock httpx pour tests Ollama
+
+# ── Qualité code (dev) ────────────────────────────
+ruff>=0.1.9
+mypy>=1.8.0
+black>=24.1.0
+isort>=5.13.0
