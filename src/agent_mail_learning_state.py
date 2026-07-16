@@ -1,9 +1,28 @@
-from src.config import Settings
-import psycopg2
+"""État d'apprentissage — métriques rapides depuis PostgreSQL.
 
+Script de diagnostic : compte les emails, les décisions du journal,
+le feedback humain par opération et l'état de la queue d'actions.
+
+Usage (depuis la racine du projet) :
+    python -m src.agent_mail_learning_state
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Permettre l'import de `src.*` quand le script est lancé directement
+# (`python src/agent_mail_learning_state.py`)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+import psycopg2  # noqa: E402
+
+from src.config import Settings  # noqa: E402
 
 settings = Settings.from_yaml()
-conn = psycopg2.connect(settings.database.dsn())
+conn = psycopg2.connect(settings.postgres.dsn())
 try:
     with conn.cursor() as cur:
         cur.execute("select count(*) from emails")
