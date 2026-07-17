@@ -25,7 +25,7 @@ from src.config import get_settings
 from src.db import get_connection
 
 if TYPE_CHECKING:
-    from src.gmail_client import GmailClient
+    from src.imap_client import IMAPClient
     from src.observer import CircuitBreaker
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ class ActionWorker:
 
     def __init__(
         self,
-        gmail_client: Optional["GmailClient"] = None,
+        gmail_client: Optional["IMAPClient"] = None,
         circuit_breaker: Optional["CircuitBreaker"] = None,
         max_attempts: int = MAX_ATTEMPTS,
     ) -> None:
@@ -78,9 +78,9 @@ class ActionWorker:
         self._stop_requested = False
 
     @property
-    def gmail_client(self) -> "GmailClient":
+    def gmail_client(self) -> "IMAPClient":
         if self._gmail_client is None:
-            # Factory : IMAP (app password) si configuré, sinon OAuth.
+            # Backend mail unique : IMAP (mot de passe d'application).
             from src.imap_client import create_mail_client
             self._gmail_client = create_mail_client()
         return self._gmail_client

@@ -232,34 +232,32 @@ est corrompu ou incomplet.
 
 ## Incidents courants
 
-### Le daemon ne demarre pas : "OAuth credentials not configured"
+### Le daemon ne demarre pas : "GMAIL_ADDRESS / GMAIL_APP_PASSWORD manquants"
 
-**Cause :** `configs/gmail-credentials.json` absent ou mal formate.
+**Cause :** le `.env` (racine ou `configs/`) ne contient pas les
+credentials IMAP, ou l'app password a ete revoque.
 
 **Solution :**
 ```bash
-# Verifier la presence
-ls -la configs/gmail-credentials.json
-# Si absent, suivre docs/SETUP-OAUTH.md
-
-# Verifier le format
-cat configs/gmail-credentials.json | python -m json.tool
+# Verifier la connexion (guide si non configure)
+python -m src.main setup-imap
+# Si absent, suivre docs/SETUP-IMAP.md
 ```
 
 ### Le daemon crash avec "historyId expired"
 
-**Cause :** Gmail expire les historyId apres ~7 jours. Si le daemon
-est arrete plus de 7 jours, il doit faire un resync.
+**Cause :** (backend API Gmail historique — supprime le 2026-07-17).
+Avec l'IMAP, le `historyId` est l'UID IMAP, qui n'expire jamais :
+ce cas ne peut plus se produire.
 
-**Solution :** c'est automatique. Le daemon detecte le 404 et fait
-un sync_full fallback (7 derniers jours, pas 6 mois - c'est le
-quick win #4 de la Phase B).
+**Solution :** aucune action requise avec le backend IMAP.
 
 ### Circuit-breaker tripped
 
 **Symptome :** dans `make health`, `circuit_breaker.paused = true`
 
-**Cause :** quota Gmail > 80% ou > 100 messages/minute
+**Cause :** > 100 messages/minute (garde-fou volume). L'ancien
+quota API Gmail n'existe plus depuis le passage a l'IMAP.
 
 **Solution :** attendre 10 minutes (pause automatique), puis le
 circuit-breaker se reset. Si ca arrive souvent :
@@ -328,9 +326,10 @@ sudo systemctl start email-learner
 **Mots de passe DB :** editer `configs/.env`, modifier
 `EMAIL_LEARNER_DB_PASSWORD`, redemarrer le daemon.
 
-**Credentials OAuth :** editer `configs/gmail-credentials.json`
-(fichier complet) et supprimer `configs/token.json`. Le flow OAuth
-se refait au prochain demarrage.
+**Mot de passe d'application Gmail (IMAP) :** creer un nouvel app
+password sur https://myaccount.google.com/apppasswords, mettre a jour
+`GMAIL_APP_PASSWORD` dans `.env`, redemarrer le daemon. Revoquer
+l'ancien dans la meme page.
 
 ### Hardening systemd
 

@@ -22,7 +22,7 @@ Agent autonome qui :
 
 | Principe | Détail |
 |----------|--------|
-| **Traitement IA local** | Les emails ne sont jamais envoyés à un LLM cloud. Stockage, embeddings, recommandations et dashboard restent locaux. Le système dépend néanmoins de Gmail API/OAuth pour récupérer et modifier les emails. |
+| **Traitement IA local** | Les emails ne sont jamais envoyés à un LLM cloud. Stockage, embeddings, recommandations et dashboard restent locaux. Le système dépend néanmoins de Gmail (IMAP, mot de passe d'application) pour récupérer et modifier les emails. |
 | **Sandbox d'ouverture des mails** | Chaque mail est ouvert dans un sandbox isolé avant traitement LLM. Détection d'injection de prompt, prompt cache, comportement hors-cadre. Alerte temps réel dans le dashboard si anomalie. |
 | **Sécurité non négociable** | Anti-injection prompt (corps, RAG, PDF, noms, sujets). |
 | **Jamais de suppression** | L'IA ne supprime jamais un mail. Soft-delete uniquement (dossier IA-Review). Interdictions applicatives vérifiables dans le code. |
@@ -151,28 +151,30 @@ postgres:
 - Sujet contenant une instruction
 - Ancien mail RAG contenant "ignore les règles"
 
-### 3.3 OAuth Gmail — scope minimal et interdictions
+### 3.3 Accès Gmail — IMAP app password et interdictions
 
-**Scope cible :** `https://www.googleapis.com/auth/gmail.modify`
+> **Depuis le 2026-07-17 : le backend OAuth / API Gmail a été remplacé
+> par l'IMAP (mot de passe d'application).** Mêmes interdictions,
+> appliquées côté IMAP.
 
-**Interdictions applicatives (code et tests) :**
-- Aucun appel à `users.messages.delete`
-- Aucun appel à `users.threads.delete`
-- Aucun appel à `users.messages.send`
-- Aucun appel à `users.drafts.send`
-- Aucun appel de transfert
-sauf pour la version final
+**Authentification :** IMAP4 SSL (`imap.gmail.com:993`) avec mot de
+passe d'application Google (`GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD`
+dans `.env`, jamais commité).
+
+**Interdictions applicatives (code et tests) :** allowlist
+`IMAPClient.ALLOWED_COMMANDS` — les commandes suivantes sont
+**bloquées avant tout appel réseau** (`IMAPForbiddenCall`) :
+- `APPEND` (équivalent de `messages.send` — envoi)
+- `EXPUNGE` / `UID EXPUNGE` / `CLOSE` (suppression définitive)
+- `DELETE` / `RENAME` mailbox (destructeur)
+- `COPY` / `MOVE` (inutiles : labels via `X-GM-LABELS`)
+- Aucun transfert de mail, sauf pour la version finale
 
 ```python
-def test_forbidden_gmail_methods_not_used():
-    forbidden = [
-        "messages().delete",
-        "threads().delete",
-        "messages().send",
-        "drafts().send",
-    ]
-    # Scanner le code source ou wrapper GmailClient
-    # pour vérifier qu'aucune méthode interdite n'est appelée
+def test_forbidden_imap_commands_not_used():
+    forbidden = ["APPEND", "EXPUNGE", "UID EXPUNGE", "DELETE"]
+    # Scanner le code source ou IMAPClient.validate_call
+    # pour vérifier qu'aucune commande interdite n'est appelée
 ```
 
 ### 3.4 Dashboard — HTTPS, pas d'authentification LAN
@@ -196,34 +198,32 @@ def test_forbidden_gmail_methods_not_used():
 
 - Logs : jamais de corps de mail (seulement sender + subject tronqué)
 
-### 3.6 Circuit-breaker anti-spam (quota units)
+### 3.6 Circuit-breaker anti-runaway (volume)
 
-Le circuit-breaker compte les **unités de quota Gmail**, pas seulement les mails/minute.
+> Avec l'IMAP, il n'y a **plus de quota API** à compter (l'ancien
+> système d'« unités de quota Gmail » est supprimé avec le backend
+> OAuth, 2026-07-17). Le circuit-breaker garde son rôle essentiel :
+> stopper un pipeline emballé.
+
+Le circuit-breaker compte les **messages traités par minute** et les
+échecs consécutifs :
 
 ```python
-quota_costs = {
-    "history.list": 2000,
-    "messages.get": 2000,
-    "messages.modify": 2000,
-    "watch": 2000,
-}
-
 class CircuitBreaker:
-    quota_per_user_per_day = 100  # quota Gmail par défaut
-    threshold_pct = 0.8                  # pause à 80%
-    
+    max_messages_per_minute = 100
+
     def check(self):
-        if self.quota_used_today > self.quota_per_user_per_day * self.threshold_pct:
-            self.pause(600)  # 10 min
         if self.messages_per_minute > 100:
+            self.pause(600)  # 10 min
+        if self.consecutive_failures > 5:
             self.pause(600)
 ```
 
 **Dashboard expose :**
-- Quota consommé par minute / par 24h
-- Nombre de `messages.get`, `messages.modify`, `history.list`
-- Nombre de retries/backoff
-- Âge du dernier `historyId`
+- Messages traités par minute / par 24h
+- Nombre de lectures (`FETCH`) et modifications (`STORE`)
+- Nombre de retries/reconnexions
+- Âge du dernier `historyId` (UID IMAP)
 
 ### 3.7 Sandbox d'ouverture des mails — micro-VM + conteneur LLM
 
@@ -362,18 +362,20 @@ class VMPool:
 - Pas de rendu CSS — le visuel du mail n'est pas pertinent pour la classification
 - Pas d'analyse de pièces jointes complexes (docx, xlsx) — seul le PDF est extrait, le reste ignoré
 
-### 3.8 Gestion des codes d'erreur Gmail API
+### 3.8 Gestion des erreurs IMAP
 
-| Code HTTP | Signification | Action |
-|-----------|--------------|--------|
-| **200** | Succès | Traitement normal |
-| **400** | Requête invalide | Logguer, skip ce message, ne pas retry |
-| **401** | Token expiré | Refresh token automatique via `google-auth-oauthlib`. Si échec refresh → alerte dashboard, pause polling. |
-| **403** | Scope insuffisant / quota dépassé | Si quota : activer circuit-breaker. Si scope : erreur fatale, alerte dashboard. |
-| **404** | `historyId` expiré | **Full resync** (`messages.list` complet), pas de retry sur l'ID périmé. |
-| **429** | Rate limit | Exponential backoff : 1s → 2s → 4s → 8s → 16s → 32s max. Après 5 retries → pause 10 min, alerte dashboard. |
-| **500** | Erreur serveur Gmail | Retry ×3 avec backoff 5s. Si échec persistant → skip, logguer, continuer le batch suivant. |
-| **503** | Service unavailable | Retry avec backoff 30s, max 3 tentatives. |
+| Cas | Signification | Action |
+|-----|--------------|--------|
+| **OK** | Succès | Traitement normal |
+| **NO** | Requête refusée (ex. dossier introuvable) | Logguer, skip, ne pas retry |
+| **BAD** | Requête invalide | Erreur fatale, alerte dashboard |
+| **Login failed** | App password révoqué / IMAP désactivé | Alerte dashboard, pause polling. Voir `docs/SETUP-IMAP.md`. |
+| **Connexion tombée** | Idle timeout / réseau | Reconnexion automatique (1 retry), puis erreur |
+| **`historyId` inconnu** | N'arrive plus : l'UID IMAP n'expire jamais | — |
+| **Volume > 100 msg/min** | Garde-fou anti-runaway | Circuit-breaker : pause 10 min, alerte dashboard |
+
+> Ancienne table HTTP de l'API Gmail (401/403/404/429/500/503)
+> supprimée avec le backend OAuth le 2026-07-17.
 
 **Comportement si Ollama indisponible par mail :**
 
@@ -387,22 +389,30 @@ Si `ollama.chat()` timeout ou erreur de connexion pendant le traitement d'un mai
 
 ## 4. Connexion Gmail
 
-### 4.1 Setup OAuth2 (une seule fois)
+### 4.1 Setup IMAP (une seule fois)
 
-recupere le credentail dans kimi-rag ou sg-rag
+Mot de passe d'application Google + activation IMAP — guide complet
+dans `docs/SETUP-IMAP.md`, vérification via `python -m src.main
+setup-imap`. (Remplace l'ancien setup OAuth2, supprimé le 2026-07-17.)
 
 ### 4.2 Récupération initiale (historique)
 
 Au premier lancement :
-- `users().messages().list(q='newer_than:6m')` — 6 derniers mois
-- Traitement par batch de 2000, exponential backoff
+- `UID SEARCH X-GM-RAW "newer_than:6m -label:spam"` dans le dossier
+  « All Mail » — 6 derniers mois
+- Traitement par batch de 2000, pagination par offset
 - Parser : headers, corps (sanitisé via `nh3` → texte), labels, snippet
 - Extraction PDF via `pypdf` (texte concaténé au body)
-- Détecter l'état initial : lu/non lu, INBOX, TRASH, ARCHIVE
+- Détecter l'état initial : lu/non lu (`\Seen`), INBOX (`\Inbox`),
+  STARRED (`\Flagged`)
 
-### 4.3 Sync delta robuste (historyId)
+### 4.3 Sync delta robuste (historyId = UID IMAP)
 
-**`users.history.list()` ne supporte pas `q=`.** Le `q=` est réservé à `messages.list()`.
+**Le `historyId` est l'UID IMAP du dernier message vu.** Contrairement
+aux historyId de l'API Gmail (expiration ~7 jours → 404 → full
+resync), les UID IMAP n'expirent jamais : le delta est `UID SEARCH
+UID <last+1>:*`. Le full resync d'urgence reste disponible
+(`sync_full(fallback=True)`, 7 derniers jours).
 
 **Table sync_state :**
 ```sql
@@ -1146,7 +1156,7 @@ connect();
 | Élément | Méthode | Rétention |
 |---------|---------|-----------|
 | Dump PostgreSQL | `pg_dump` quotidien via cron | 7 jours local, 30 jours sur serveur-nas |
-| Config | `config.yaml`, `token.json`, migrations | Inclus dans le dump |
+| Config | `config.yaml`, `.env` (app password IMAP), migrations | Inclus dans le dump |
 | Test restauration | **Automatisé** chaque semaine. Script `restore_test.sh` : restore le dernier dump sur une DB `email_learner_test`, vérifie `row_count >= last_known_count * 0.99`, nettoie. Alerte dashboard si échec. | Dernier dump restauré + vérifié |
 | Export dashboard | Bouton "Export JSON complet" | À la demande |
 
@@ -1223,9 +1233,9 @@ connect();
 ### 12.1 Python
 
 ```
-google-api-python-client    # Gmail API
-google-auth-oauthlib        # OAuth2
-google-auth-httplib2        # OAuth2 transport
+# (Accès mail : IMAP via imaplib — stdlib, aucune dépendance.
+#  Les libs google-* de l'ancien backend API/OAuth ont été retirées
+#  le 2026-07-17.)
 psycopg2-binary             # PostgreSQL
 pgvector                    # Recherche vectorielle
 nh3                         # Sanitization HTML (maintenu)
@@ -1283,9 +1293,9 @@ L'image de la micro-VM est construite une fois et réutilisée :
 | 1 | P0 | PostgreSQL : user dédié, hostssl, `postgresql-contrib` installé | `psql -h 10.0.0.223 -U email_learner_app -d email_learner` connecte |
 | 2 | P0 | Créer schéma DB + migrations Alembic (incluant `sandbox_alerts`) | Tables créées, trigger tsvector actif |
 | 3 | P0 | Dashboard minimal HTTPS/Caddy (sans auth) + `/api/health` | `https://ia-general:8080` affiche santé système |
-| 4 | P0 | OAuth Gmail (scope gmail.modify) + interdictions dans le code | `observer.py` récupère 1 email. Test interdictions passe. |
+| 4 | P0 | IMAP Gmail (app password) + interdictions dans le code | `observer.py` récupère 1 email. Test interdictions passe. |
 | 5 | P0 | Sync initiale `messages.list` + ingestion idempotente | 2000 emails dans PostgreSQL |
-| 6 | P0 | Sync delta `history.list` + fallback 404 full-resync + gestion codes erreur (429, 401, 500) | Delta fonctionne, sync_state mis à jour, retry backoff testé |
+| 6 | P0 | Sync delta par UID IMAP + garde-fous volume + gestion erreurs IMAP | Delta fonctionne, sync_state mis à jour, retry reconnexion testé |
 | 7 | P0 | Sanitization nh3 + PDF extraction + tests adversariaux | Tests adversariaux passent |
 | 8 | P0 | Sandbox Firecracker : image VM Alpine + conteneur Ollama `--network=none` + pool VMs | VM démarre, classifie un mail, retourne JSON valide, se détruit. Tests adversariaux passent. Alertes remontent dashboard. |
 | 9 | P0 | Install bge-m3 sur Ollama + embeddings | Embeddings générés pour les 100 premiers emails |
@@ -1317,9 +1327,9 @@ L'image de la micro-VM est construite une fois et réutilisée :
 | KVM non disponible sur ia-general | Sandbox impossible | Fallback : mode dégradé → sandbox = conteneur Docker `--network=none` seul (sans VM). Alerte dashboard. |
 | XSS via sujet/corps dans dashboard | Exécution JS non désirée | Échappement HTML systématique, jamais innerHTML, CSP |
 | Accès non autorisé LAN | Consultation emails | Dashboard bind 10.0.0.223 uniquement, pas d'exposition internet, pas de port forwarding |
-| Spam massif | Crash quota API | Circuit-breaker par quota units + gestion 429 backoff |
-| OAuth token expiré/volé | Sync cassée | Refresh auto (gestion 401), rotation, interdictions applicatives |
-| historyId 404 | Sync cassée | Fallback full resync |
+| Spam massif | Saturation du pipeline | Circuit-breaker volume (messages/min) + backoff |
+| App password révoqué/volé | Sync cassée | Révocation immédiate côté Google, rotation simple, interdictions applicatives |
+| Connexion IMAP tombée | Sync interrompue | Reconnexion automatique (1 retry), puis alerte |
 | Double action après crash | Doublons | Queue idempotente |
 | Hallucination IA P2 | Faux archivage | Seuils par action (précision mesurée), mots-clés critiques, soft-delete |
 | Ollama indisponible | P1/P2 bloqués | Mode dégradé, P0 continue, compteur échecs → suspension auto, retry auto |
@@ -1360,9 +1370,9 @@ sudo apt install firecracker
 # 5. Migrations DB
 alembic upgrade head
 
-# 6. OAuth Gmail (une fois, interactif)
-python -m src.main --setup-oauth
-# → Suivre le flow OAuth dans le navigateur
+# 6. Accès Gmail IMAP (une fois, ~5 min)
+python -m src.main setup-imap
+# → Guide app password + vérification de connexion (docs/SETUP-IMAP.md)
 
 # 7. Ollama
 ollama pull bge-m3

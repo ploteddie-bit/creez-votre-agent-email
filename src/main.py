@@ -15,8 +15,7 @@ Usage :
     python -m src.main process [N]           # process N emails (defaut 50)
     python -m src.main health                # JSON health et sort
     python -m src.main dashboard             # lance le dashboard FastAPI
-    python -m src.main setup-oauth           # guide pour configurer OAuth
-    python -m src.main setup-oauth --run     # lance le flow OAuth (navigateur)
+    python -m src.main setup-imap            # guide + vérif IMAP (app password)
 """
 from __future__ import annotations
 
@@ -159,77 +158,66 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
         return 1
 
 
-def cmd_setup_oauth(args: argparse.Namespace) -> int:
-    """Configure OAuth Gmail : guide par defaut, flow reel avec --run.
+def cmd_setup_imap(args: argparse.Namespace) -> int:
+    """Vérifie la configuration IMAP (mot de passe d'application).
 
-    - Sans `--run` : affiche le guide (ou l'etat si deja configure) et
-      retourne 0. Jamais de navigateur -> safe pour les scripts/tests.
-    - Avec `--run` : exige `configs/gmail-credentials.json`, lance le
-      flow OAuth installed-app (navigateur), et sauvegarde le token
-      dans `configs/token.json` (gitignored).
+    - `--guide` : affiche le guide de création du mot de passe
+      d'application et retourne 0 (aucune connexion — safe pour
+      les tests et scripts).
+    - Sans `--guide` : si `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD`
+      sont absents, affiche le guide et retourne 1 ; sinon tente
+      une connexion réelle (login + LIST + search 7j). Aucun
+      secret n'est jamais affiché.
     """
-    credentials_path = PROJECT_ROOT / "configs" / "gmail-credentials.json"
-    token_path = PROJECT_ROOT / "configs" / "token.json"
-    run_flow = getattr(args, "run", False)
+    from src.imap_client import IMAPClient, _read_env_var
 
-    if not credentials_path.exists():
+    address = _read_env_var("GMAIL_ADDRESS")
+    app_password = _read_env_var("GMAIL_APP_PASSWORD")
+    guide_only = getattr(args, "guide", False)
+
+    if guide_only or not address or not app_password:
         print("=" * 60)
-        print("Setup OAuth Gmail - Agent Mail 24/7")
+        print("Configuration IMAP Gmail — Agent Mail 24/7")
         print("=" * 60)
         print()
-        print(f"Fichier manquant : {credentials_path}")
+        print("Variables manquantes : GMAIL_ADDRESS / GMAIL_APP_PASSWORD")
         print()
-        print("Pour le creer :")
+        print("Pour les créer :")
         print()
-        print("1. Creer un projet Google Cloud Console :")
-        print("   https://console.cloud.google.com/")
+        print("1. Activer la validation en 2 étapes sur le compte Google :")
+        print("   https://myaccount.google.com/security")
         print()
-        print("2. Activer l'API Gmail :")
-        print("   APIs & Services > Library > chercher 'Gmail API' > Enable")
+        print("2. Créer un mot de passe d'application :")
+        print("   https://myaccount.google.com/apppasswords")
+        print("   - Nom : 'agent-mail' (par exemple)")
+        print("   - Copier le mot de passe de 16 caractères généré")
         print()
-        print("3. Creer un ecran de consentement OAuth :")
-        print("   APIs & Services > OAuth consent screen")
-        print("   - User type: External")
-        print("   - Scopes: https://www.googleapis.com/auth/gmail.modify")
-        print("   - Test users: ajouter votre email")
+        print("3. Activer l'IMAP dans Gmail :")
+        print("   Paramètres > Transfert et POP/IMAP > Activer l'IMAP")
         print()
-        print("4. Creer un identifiant OAuth 2.0 :")
-        print("   APIs & Services > Credentials > Create Credentials > OAuth client ID")
-        print("   - Application type: Desktop app")
-        print("   - Download JSON")
+        print("4. Écrire dans `.env` (racine du projet) :")
+        print("   GMAIL_ADDRESS=votre.adresse@gmail.com")
+        print("   GMAIL_APP_PASSWORD=le-mot-de-passe-application")
         print()
-        print("5. Copier le JSON telecharge vers :")
-        print(f"   {credentials_path}")
-        print()
-        print("6. Relancer : python -m src.main setup-oauth --run")
+        print("5. Relancer : python -m src.main setup-imap")
         print()
         print("=" * 60)
-        # Guide affiche = OK ; echec seulement si le flow etait demande
-        return 1 if run_flow else 0
+        return 0 if guide_only else 1
 
-    if not run_flow:
-        print(f"Credentials OAuth trouves : {credentials_path}")
-        if token_path.exists():
-            print(f"Token present : {token_path}")
-        else:
-            print("Token absent. Pour lancer le flow OAuth (navigateur) :")
-            print("   python -m src.main setup-oauth --run")
-        return 0
-
-    # Flow OAuth reel (navigateur local) — uniquement avec --run
-    settings = get_settings()
-    from google_auth_oauthlib.flow import InstalledAppFlow
-
-    print("Lancement du flow OAuth dans le navigateur...")
-    print(f"Scopes : {list(settings.gmail.oauth_scopes)}")
-    flow = InstalledAppFlow.from_client_secrets_file(
-        str(credentials_path), list(settings.gmail.oauth_scopes),
-    )
-    creds = flow.run_local_server(port=0)
-    token_path.write_text(creds.to_json(), encoding="utf-8")
-    print()
-    print(f"Token enregistre : {token_path}")
-    print("Le daemon peut maintenant synchroniser Gmail.")
+    print("Vérification de la connexion IMAP...")
+    try:
+        client = IMAPClient()
+        labels = client.list_labels()
+        messages, _ = client.list_messages(query="newer_than:7d",
+                                           max_results=5)
+        client.close()
+    except Exception as e:
+        print(f"ÉCHEC connexion IMAP : {e}")
+        print("Vérifier l'app password et l'activation IMAP (voir guide).")
+        return 1
+    print(f"OK — {len(labels)} labels visibles, "
+          f"{len(messages)} message(s) sur 7 jours.")
+    print("Le daemon peut synchroniser la boîte.")
     return 0
 
 
@@ -414,11 +402,11 @@ def build_parser() -> argparse.ArgumentParser:
     # dashboard
     sub.add_parser("dashboard", help="Lance le dashboard FastAPI (Caddy en front)")
 
-    # setup-oauth
-    oauth_parser = sub.add_parser("setup-oauth",
-                                  help="Guide OAuth Gmail (--run : lance le flow)")
-    oauth_parser.add_argument("--run", action="store_true",
-                              help="Lance le flow OAuth dans le navigateur")
+    # setup-imap
+    imap_parser = sub.add_parser("setup-imap",
+                                 help="Guide + vérification IMAP (app password)")
+    imap_parser.add_argument("--guide", action="store_true",
+                             help="Affiche le guide sans tester la connexion")
 
     return parser
 
@@ -440,8 +428,8 @@ def main() -> int:
         return cmd_health(args)
     if args.command == "dashboard":
         return cmd_dashboard(args)
-    if args.command == "setup-oauth":
-        return cmd_setup_oauth(args)
+    if args.command == "setup-imap":
+        return cmd_setup_imap(args)
     parser.print_help()
     return 1
 

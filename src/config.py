@@ -4,8 +4,9 @@ Charge la configuration depuis `configs/config.yaml` (copié depuis
 `config.yaml.example`) et les variables d'environnement
 préfixées `EMAIL_LEARNER_*` (depuis `configs/.env`).
 
-Les secrets (mots de passe, credentials OAuth) **doivent** venir
-de l'environnement, jamais être hardcodés ni commités.
+Les secrets (mot de passe PostgreSQL, mot de passe d'application
+Gmail IMAP) **doivent** venir de l'environnement, jamais être
+hardcodés ni commités.
 
 Usage :
     from src.config import get_settings
@@ -125,17 +126,16 @@ class P2Settings(BaseModel):
 
 
 class GmailSettings(BaseModel):
-    """Configuration Gmail API + allowlist d'interdictions.
+    """Configuration de la boîte Gmail (backend IMAP app password).
 
-    `forbidden_methods` est appliqué comme une contrainte **non négociable** :
-    le code refuse de compiler si une de ces méthodes est appelée.
+    `forbidden_methods` documente la contrainte **non négociable** :
+    jamais d'envoi ni de suppression de mail. Côté IMAP, elle est
+    appliquée par `IMAPClient.ALLOWED_COMMANDS` (APPEND / EXPUNGE /
+    DELETE absents). Les champs quota pilotent le circuit-breaker.
     """
 
     model_config = ConfigDict(extra="ignore")
 
-    oauth_scopes: list[str] = Field(
-        default_factory=lambda: ["https://www.googleapis.com/auth/gmail.modify"]
-    )
     forbidden_methods: list[str] = Field(
         default_factory=lambda: [
             "users.messages.delete",

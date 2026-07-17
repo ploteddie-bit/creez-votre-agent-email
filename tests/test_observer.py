@@ -203,25 +203,15 @@ class TestGmailObserverSync:
     def test_ensure_ia_review_label_creates_if_missing(
         self, observer: "GmailObserver", mock_gmail: MagicMock,
     ) -> None:
-        """Si IA-Review n'existe pas, on le cree et on stocke son ID."""
-        # Mock du service pour le create
-        mock_service = MagicMock()
-        mock_labels = mock_service.users().labels()
-        mock_labels.create.return_value.execute.return_value = {
-            "id": "Label_42", "name": "IA-Review",
-        }
-        mock_gmail._get_service.return_value = mock_service
+        """Si IA-Review n'existe pas, on le cree (IMAP : id == nom)."""
+        mock_gmail.create_label.return_value = "IA-Review"
         # list_labels ne retourne rien (label absent)
         mock_gmail.list_labels.return_value = [
             {"id": "INBOX", "name": "INBOX"},
         ]
         label_id = observer.ensure_ia_review_label()
-        assert label_id == "Label_42"
-        mock_labels.create.assert_called_once()
-        # Verifie le scope du create
-        call_kwargs = mock_labels.create.call_args.kwargs
-        assert call_kwargs["userId"] == "me"
-        assert call_kwargs["body"]["name"] == "IA-Review"
+        assert label_id == "IA-Review"
+        mock_gmail.create_label.assert_called_once_with("IA-Review")
 
     def test_ensure_ia_review_label_uses_existing(
         self, observer: "GmailObserver", mock_gmail: MagicMock,
@@ -234,7 +224,7 @@ class TestGmailObserverSync:
         label_id = observer.ensure_ia_review_label()
         assert label_id == "Label_99"
         # Pas d'appel create
-        mock_gmail._get_service.assert_not_called()
+        mock_gmail.create_label.assert_not_called()
 
     def test_get_label_id_returns_stored(
         self, observer: "GmailObserver", mock_gmail: MagicMock,

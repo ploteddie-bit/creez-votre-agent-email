@@ -15,8 +15,8 @@ sur votre serveur.
 # 1. Installer (une seule fois)
 ./bootstrap.sh
 
-# 2. Configurer OAuth Gmail
-python -m src.main setup-oauth
+# 2. Configurer l'accès Gmail (IMAP, mot de passe d'application)
+python -m src.main setup-imap
 # Suivre les instructions a l'ecran
 
 # 3. Lancer
@@ -57,7 +57,7 @@ tranquille.
 - **Ollama** avec les modeles `bge-m3` (embeddings) et un LLM
   (par defaut `llama3.1:8b`)
 - **Linux/macOS** (Windows possible via WSL)
-- Acces reseau sortant pour l'API Gmail (HTTPS sortant uniquement)
+- Acces reseau sortant vers `imap.gmail.com:993` (IMAP SSL uniquement)
 
 ### 1. Cloner et installer
 
@@ -88,18 +88,18 @@ psql -h <ip> -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE email_learner TO e
 make migrate
 ```
 
-### 4. Configurer OAuth Gmail
+### 4. Configurer l'accès Gmail (IMAP)
 
-Suivre le guide detaille dans [docs/SETUP-OAUTH.md](docs/SETUP-OAUTH.md)
+Suivre le guide detaille dans [docs/SETUP-IMAP.md](docs/SETUP-IMAP.md)
 ou simplement :
 
 ```bash
-make setup-oauth    # affiche le guide etape par etape
+python -m src.main setup-imap    # guide + verification de connexion
 ```
 
-En resume : creer un projet Google Cloud, activer l'API Gmail,
-creer un identifiant OAuth 2.0 (type "Desktop app"), telecharger le
-JSON et le placer dans `configs/gmail-credentials.json`.
+En resume : activer la 2FA Google, creer un mot de passe d'application
+(https://myaccount.google.com/apppasswords), activer l'IMAP dans Gmail,
+puis ecrire `GMAIL_ADDRESS` et `GMAIL_APP_PASSWORD` dans `.env`.
 
 ### 5. Premier lancement
 
@@ -215,7 +215,7 @@ mots-cles critiques, idempotence, circuit-breaker, contrats SQL.
   plan d'execution
 - [docs/OUTILS-agent-mail.md](docs/OUTILS-agent-mail.md) : dependances
   detaillees
-- [docs/SETUP-OAUTH.md](docs/SETUP-OAUTH.md) : guide OAuth Gmail
+- [docs/SETUP-IMAP.md](docs/SETUP-IMAP.md) : guide IMAP (app password)
 - [docs/RUNBOOK.md](docs/RUNBOOK.md) : exploitation / backup
 - [docs/REVIEW-ANGLES-MORTS-2026-07-17.md](docs/REVIEW-ANGLES-MORTS-2026-07-17.md) :
   audit externe et reponses
@@ -236,8 +236,9 @@ garde-fous, avec un kill-switch toujours disponible.
 > **Vos donnees restent chez vous.**
 
 Pas de LLM cloud. Pas d'envoi de mails sortants. Pas d'appels
-tierces. Le daemon parle uniquement avec Gmail (entrant/sortant via
-OAuth strictement scope `gmail.modify`) et Ollama (local).
+tierces. Le daemon parle uniquement avec Gmail (IMAP SSL, mot de
+passe d'application — envoi et suppression bloques par allowlist)
+et Ollama (local).
 
 > **Transparence totale.**
 

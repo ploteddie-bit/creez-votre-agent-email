@@ -200,7 +200,7 @@ class GmailObserver:
 
     def __init__(
         self,
-        gmail_client: Any = None,  # src.gmail_client.GmailClient (lazy pour tests)
+        gmail_client: Any = None,  # src.imap_client.IMAPClient (lazy pour tests)
         ingester: Any = None,      # src.ingester.EmailIngester
         account_id: str = "me",
         circuit_breaker: Optional[CircuitBreaker] = None,
@@ -217,7 +217,7 @@ class GmailObserver:
     @property
     def gmail_client(self) -> Any:
         if self._gmail_client is None:
-            # Factory : IMAP (app password) si configuré, sinon OAuth.
+            # Backend mail unique : IMAP (mot de passe d'application).
             from src.imap_client import create_mail_client
             self._gmail_client = create_mail_client()
         return self._gmail_client
@@ -319,27 +319,10 @@ class GmailObserver:
         if IA_REVIEW_LABEL_NAME in existing:
             self._ia_review_label_id = existing[IA_REVIEW_LABEL_NAME]
         else:
-            # 3. Sinon, créer le label
-            from src.imap_client import IMAPClient
-            if isinstance(self.gmail_client, IMAPClient):
-                # Backend IMAP : création directe, l'id == le nom.
-                self._ia_review_label_id = self.gmail_client.create_label(
-                    IA_REVIEW_LABEL_NAME
-                )
-            else:
-                # Backend API Gmail : création via le service brut.
-                self.gmail_client.validate_call("users.labels.create")
-                service = self.gmail_client._get_service()
-                result = service.users().labels().create(
-                    userId="me",
-                    body={
-                        "name": IA_REVIEW_LABEL_NAME,
-                        "labelListVisibility": "labelShow",
-                        "messageListVisibility": "show",
-                        "color": {"backgroundColor": IA_REVIEW_LABEL_COLOR, "textColor": "#ffffff"},
-                    },
-                ).execute()
-                self._ia_review_label_id = result["id"]
+            # 3. Sinon, créer le label (IMAP : l'id == le nom)
+            self._ia_review_label_id = self.gmail_client.create_label(
+                IA_REVIEW_LABEL_NAME
+            )
             logger.info("created IA-Review label: %s", self._ia_review_label_id)
 
         # 4. Stocker dans gmail_labels (PostgreSQL) pour usage futur

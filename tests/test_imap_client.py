@@ -9,7 +9,7 @@ Couvre :
   - `list_history` (delta sync par UID — sans expiration) ;
   - `list_labels` / `create_label` ;
   - la reconnexion automatique après perte de connexion ;
-  - la factory `create_mail_client` (IMAP vs OAuth).
+  - la factory `create_mail_client` (backend IMAP unique).
 
 Tout passe par `FakeIMAP4_SSL` : aucun réseau, aucun credential réel.
 """
@@ -478,34 +478,22 @@ class TestFolderResolution:
 
 
 # ============================================================
-# Factory
+# Factory (backend IMAP unique — OAuth supprimé le 2026-07-17)
 # ============================================================
 
 class TestFactory:
-    def test_prefers_imap_when_credentials_present(self, monkeypatch):
-        monkeypatch.setattr(
-            imap_module, "_read_env_var",
-            lambda name: {
-                "GMAIL_ADDRESS": "user@example.com",
-                "GMAIL_APP_PASSWORD": "app-secret",
-            }.get(name))
+    def test_returns_imap_client(self):
         assert isinstance(create_mail_client(), IMAPClient)
 
-    def test_falls_back_to_gmail_oauth(self, monkeypatch):
-        from src.gmail_client import GmailClient
-        monkeypatch.setattr(imap_module, "_read_env_var",
-                            lambda name: None)
-        assert isinstance(create_mail_client(), GmailClient)
-
-    def test_forced_backend(self, monkeypatch):
-        from src.gmail_client import GmailClient
-        monkeypatch.setattr(imap_module, "_read_env_var",
-                            lambda name: None)
+    def test_backend_arg_imap(self):
         assert isinstance(create_mail_client("imap"), IMAPClient)
-        assert isinstance(create_mail_client("gmail"), GmailClient)
 
-    def test_env_backend_variable(self, monkeypatch):
+    def test_unknown_backend_ignored_with_warning(self, monkeypatch, caplog):
+        """EMAIL_BACKEND=gmail est ignoré : l'OAuth n'existe plus."""
         monkeypatch.setattr(
             imap_module, "_read_env_var",
-            lambda name: "imap" if name == "EMAIL_BACKEND" else None)
-        assert isinstance(create_mail_client(), IMAPClient)
+            lambda name: "gmail" if name == "EMAIL_BACKEND" else None)
+        with caplog.at_level("WARNING", logger="src.imap_client"):
+            client = create_mail_client()
+        assert isinstance(client, IMAPClient)
+        assert any("ignoré" in r.message for r in caplog.records)

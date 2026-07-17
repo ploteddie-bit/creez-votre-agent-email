@@ -32,7 +32,7 @@ def full_mocks(monkeypatch: pytest.MonkeyPatch):
 
     Mock :
       - get_connection (DB) -> tout reste en memoire (lastrowid, etc.)
-      - Gmail API (via GmailClient)
+      - client mail (interface IMAPClient)
       - Ollama (via Embedder + Recommender)
 
     Returns un dict avec tous les mocks pour assertions.
@@ -81,7 +81,7 @@ def full_mocks(monkeypatch: pytest.MonkeyPatch):
     for mod in (db_mod, obs_mod, rec_mod, dec_mod, aw_mod):
         monkeypatch.setattr(mod, "get_connection", lambda *a, **kw: ctx)
 
-    # GmailClient mock : retourne des messages, labels, etc.
+    # Client mail mock : retourne des messages, labels, etc.
     mock_gmail = MagicMock()
     # list_messages retourne (messages, next_token) - 1 page de 3 messages
     sample_messages = [
@@ -307,22 +307,21 @@ class TestCLISmoke:
         )
         assert result.returncode == 0
         # Verifie que les sous-commandes sont listees
-        for cmd in ("daemon", "sync", "embed", "process", "health", "dashboard", "setup-oauth"):
+        for cmd in ("daemon", "sync", "embed", "process", "health", "dashboard", "setup-imap"):
             assert cmd in result.stdout, f"subcommand '{cmd}' missing from --help"
 
-    def test_setup_oauth_prints_guide(self) -> None:
-        """python -m src.main setup-oauth affiche le guide."""
+    def test_setup_imap_prints_guide(self) -> None:
+        """python -m src.main setup-imap --guide affiche le guide (sans réseau)."""
         result = subprocess.run(
-            [sys.executable, "-m", "src.main", "setup-oauth"],
+            [sys.executable, "-m", "src.main", "setup-imap", "--guide"],
             capture_output=True, text=True, timeout=10,
             cwd="C:\\Users\\eddie\\Documents\\agent-mail",
         )
         assert result.returncode == 0
         # Verifie les elements cles du guide
-        assert "Google Cloud Console" in result.stdout
-        assert "Gmail API" in result.stdout
-        assert "gmail.modify" in result.stdout
-        assert "gmail-credentials.json" in result.stdout
+        assert "mot de passe d'application" in result.stdout
+        assert "GMAIL_APP_PASSWORD" in result.stdout
+        assert "apppasswords" in result.stdout
 
 
 # ============================================================
@@ -396,7 +395,7 @@ class TestAllComponentsImportable:
         modules = [
             "src.config", "src.db", "src.models",
             "src.parser", "src.embedder", "src.ingester",
-            "src.gmail_client", "src.observer", "src.rules_engine",
+            "src.imap_client", "src.observer", "src.rules_engine",
             "src.search", "src.recommender", "src.action_worker",
             "src.decider", "src.dashboard", "src.main",
         ]
@@ -417,7 +416,7 @@ class TestAllComponentsImportable:
         from src.main import build_parser
         parser = build_parser()
         # Tester chaque sous-commande en l'appelant avec --help
-        for cmd in ("daemon", "sync", "embed", "process", "health", "dashboard", "setup-oauth"):
+        for cmd in ("daemon", "sync", "embed", "process", "health", "dashboard", "setup-imap"):
             try:
                 # Parse avec la sous-commande + --help, on s'attend a SystemExit
                 # (argparse appelle sys.exit(0) apres --help)

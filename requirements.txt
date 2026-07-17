@@ -3,10 +3,9 @@
 # Cible : Python 3.11+
 # =====================================================
 
-# ── Gmail API ─────────────────────────────────────
-google-api-python-client>=2.100.0
-google-auth-oauthlib>=1.1.0
-google-auth-httplib2>=0.1.1
+# ── Boîte mail ────────────────────────────────────
+# Backend IMAP (stdlib imaplib) — aucune dépendance externe.
+# Les libs google-* (API Gmail / OAuth) ont été retirées le 2026-07-17.
 
 # ── Base de données ───────────────────────────────
 psycopg2-binary>=2.9.9

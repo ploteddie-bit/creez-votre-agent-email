@@ -1,31 +1,31 @@
-"""Client IMAP Gmail (mot de passe d'application) — backend mail alternatif.
+"""Client IMAP Gmail (mot de passe d'application) — backend mail unique.
 
-Ce module remplace l'API Gmail (OAuth2) par une connexion IMAP4 SSL
-authentifiée par **mot de passe d'application** Google. Décision
-produit du 2026-07-17 (choix utilisateur validé) :
-  - l'API Gmail impose quotas, console GCP et un flow OAuth navigateur ;
-  - un mot de passe d'application IMAP se configure en 2 minutes et
-    suffit pour tout ce que fait agent-mail (lire, lister, modifier
-    des labels — jamais envoyer, jamais supprimer).
+Ce module est le **seul point de contact avec la boîte mail**. Il
+utilise une connexion IMAP4 SSL authentifiée par **mot de passe
+d'application** Google. Décision produit du 2026-07-17 (choix
+utilisateur validé) : l'ancien backend OAuth / API Gmail a été
+supprimé (quotas, console GCP, flow navigateur trop lourds) — un mot
+de passe d'application IMAP se configure en 2 minutes et suffit pour
+tout ce que fait agent-mail (lire, lister, modifier des labels —
+jamais envoyer, jamais supprimer).
 
-**Interface identique à `GmailClient`** (adaptateur) : mêmes méthodes
-publiques, mêmes formats de retour (dicts au format Gmail API v1).
-Le pipeline complet (parser, ingester, recommender, action_worker,
-observer) fonctionne sans modification.
+**Interface historiquement alignée sur l'API Gmail v1** : mêmes
+méthodes publiques et mêmes formats de retour que l'ancien client
+API, pour que le pipeline complet (parser, ingester, recommender,
+action_worker, observer) fonctionne sans modification.
 
-Sécurité — mêmes gardes-fous que `GmailClient` :
+Sécurité — gardes-fous (équivalents de l'ancienne allowlist API) :
   1. Allowlist explicite des commandes IMAP (`ALLOWED_COMMANDS`) :
-     APPEND (= envoi), EXPUNGE / DELETE (suppression) sont **absentes**,
-     comme `messages().send` / `messages().delete` dans l'API.
+     APPEND (= envoi), EXPUNGE / DELETE (suppression) en sont
+     **absentes**, comme `messages().send` / `messages().delete`.
   2. `validate_call()` vérifié avant chaque commande réseau.
   3. Le mot de passe d'application n'est jamais loggé.
   4. Aucune suppression définitive : `archive` = retrait du label
      `\\Inbox` (le mail reste dans « All Mail »).
 
-Sélection du backend : `create_mail_client()` retourne un
-`IMAPClient` si `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` sont définis
-(environnement, `.env` racine, ou `configs/.env`), sinon un
-`GmailClient` (OAuth). `EMAIL_BACKEND=imap|gmail` force le choix.
+Configuration : `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` lus depuis
+l'environnement, `.env` (racine) ou `configs/.env`. Vérification :
+`python -m src.main setup-imap`.
 
 Correspondances d'identifiants :
   - `emails.id` ↔ `X-GM-MSGID` (stable, même valeur que l'ID API Gmail)
@@ -35,7 +35,8 @@ Correspondances d'identifiants :
     par construction côté IMAP).
 
 Limites connues (documentées, acceptées) :
-  - Dossier de sync unique : « [Gmail]/All Mail » (couvre INBOX +
+  - Dossier de sync : « All Mail », résolu via le flag spécial `\\All`
+    (RFC 6154) — indépendant de la langue du compte (couvre INBOX +
     archivés, hors spam/corbeille — comme la query `-label:spam`).
   - La recherche est déléguée à l'extension Gmail `X-GM-RAW`
     (mêmes opérateurs que la recherche Gmail, pas de parsing local).
@@ -280,8 +281,10 @@ def _internal_date_ms(header: bytes) -> int:
 # === Client ===
 
 class IMAPClient:
-    """Client IMAP Gmail — interface publique identique à `GmailClient`.
+    """Client IMAP Gmail — interface mail unique du projet.
 
+    Mêmes méthodes publiques et formats de retour que l'ancien client
+    API (supprimé) : observer / action_worker / parser inchangés.
     La connexion n'est ouverte qu'à la demande (lazy) pour permettre
     les tests unitaires sans réseau.
     """
@@ -471,7 +474,7 @@ class IMAPClient:
         return [by_uid[u] for u in uids if u in by_uid]
 
     # ----------------------------------------------------------------
-    # Interface publique (compatible GmailClient)
+    # Interface publique (utilisée par observer / action_worker)
     # ----------------------------------------------------------------
     def list_messages(
         self, query: str = "", max_results: int = 100,
@@ -536,7 +539,7 @@ class IMAPClient:
         """Delta sync : messages arrivés après `start_history_id` (= UID).
 
         Retourne un record unique `{"id": <max_uid>, "messages": [...]}`
-        — format compatible `GmailClient.list_history` pour l'observer.
+        — format history attendu par l'observer (sync delta).
         Les UID n'expirent jamais : pas de 404, pas de full resync.
         """
         try:
@@ -634,31 +637,24 @@ class IMAPClient:
         return name
 
 
-# === Factory : sélection du backend mail ===
+# === Factory : backend mail unique ===
 
 def create_mail_client(backend: Optional[str] = None) -> Any:
-    """Retourne le client mail actif : IMAP (app password) ou Gmail API.
+    """Retourne le client mail du projet : `IMAPClient` (app password).
 
-    Ordre de décision :
-      1. `backend` explicite ("imap" / "gmail")
-      2. variable `EMAIL_BACKEND`
-      3. auto : IMAP si `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` sont
-         définis, sinon `GmailClient` (OAuth — nécessite
-         `configs/token.json`, voir `python -m src.main setup-oauth`).
+    L'ancien backend OAuth / API Gmail a été **supprimé** le 2026-07-17
+    (quotas, console GCP, flow navigateur trop lourds) : l'IMAP par
+    mot de passe d'application est le seul backend supporté.
+
+    `backend` / `EMAIL_BACKEND` n'acceptent plus que "imap" (défaut) —
+    toute autre valeur est ignorée avec un avertissement. Gardée comme
+    point d'entrée unique pour que `observer` / `action_worker` n'aient
+    pas à connaître la classe concrète.
     """
-    choice = (backend or _read_env_var("EMAIL_BACKEND") or "auto").lower()
-    if choice == "imap":
-        logger.info("backend mail: IMAP (mot de passe d'application)")
-        return IMAPClient()
-    if choice == "gmail":
-        from src.gmail_client import GmailClient
-        logger.info("backend mail: Gmail API (OAuth2, forcé)")
-        return GmailClient()
-    if choice != "auto":
-        logger.warning("EMAIL_BACKEND inconnu: %r → auto", choice)
-    if _read_env_var("GMAIL_ADDRESS") and _read_env_var("GMAIL_APP_PASSWORD"):
-        logger.info("backend mail: IMAP (mot de passe d'application)")
-        return IMAPClient()
-    from src.gmail_client import GmailClient
-    logger.info("backend mail: Gmail API (OAuth2)")
-    return GmailClient()
+    choice = (backend or _read_env_var("EMAIL_BACKEND") or "imap").lower()
+    if choice not in ("imap", "auto"):
+        logger.warning(
+            "EMAIL_BACKEND=%r ignoré : le backend OAuth/API Gmail a été "
+            "supprimé — utilisation de l'IMAP.", choice)
+    logger.info("backend mail: IMAP (mot de passe d'application)")
+    return IMAPClient()
