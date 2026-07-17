@@ -80,8 +80,9 @@ class ActionWorker:
     @property
     def gmail_client(self) -> "GmailClient":
         if self._gmail_client is None:
-            from src.gmail_client import GmailClient
-            self._gmail_client = GmailClient()
+            # Factory : IMAP (app password) si configuré, sinon OAuth.
+            from src.imap_client import create_mail_client
+            self._gmail_client = create_mail_client()
         return self._gmail_client
 
     @property
