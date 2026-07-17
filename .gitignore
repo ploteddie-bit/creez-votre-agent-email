@@ -51,6 +51,7 @@ configs/config.yaml
 configs/.env
 configs/gmail-credentials.json
 configs/token.json
+configs/sync_progress.json
 configs/*.secret
 configs/*.private
 
