@@ -5,6 +5,7 @@ import pytest
 
 from src.gmail_client import (
     ALLOWED_METHODS,
+    GmailAuthError,
     GmailClient,
     GmailForbiddenCall,
 )
@@ -174,3 +175,120 @@ def test_no_forbidden_method_called_in_source() -> None:
         "Forbidden Gmail API methods called directly:\n" + "\n".join(violations)
         + "\n\nUse GmailClient().validate_call(...) or a wrapper method instead."
     )
+
+
+# ============================================================
+# Tests OAuth : chargement réel du token (E1 — fin du stub)
+# ============================================================
+
+class _FakeCreds:
+    """Faux credentials OAuth pour les tests (aucun réseau)."""
+
+    def __init__(self, *, valid: bool = True, expired: bool = False,
+                 refresh_token: str | None = None) -> None:
+        self.valid = valid
+        self.expired = expired
+        self.refresh_token = refresh_token
+        self.refresh_called = False
+
+    def refresh(self, request) -> None:  # noqa: ARG002 - signature imposée
+        self.refresh_called = True
+        self.valid = True
+        self.expired = False
+
+    def to_json(self) -> str:
+        return '{"token": "refreshed-token"}'
+
+
+class _FakeCredentialsClass:
+    """Simule google.oauth2.credentials.Credentials (injection de classe)."""
+
+    creds: _FakeCreds | None = None
+
+    @classmethod
+    def from_authorized_user_file(cls, path, scopes):  # noqa: ARG003
+        return cls.creds
+
+
+class TestOAuthTokenLoading:
+    """_load_credentials charge, rafraîchit ou échoue proprement."""
+
+    @pytest.fixture
+    def fake_google_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Injecte un faux `google.auth.transport.requests` (lazy-import).
+
+        Les libs google ne sont pas installées sur la machine de dev ;
+        en production elles viennent de requirements.txt. Le lazy-import
+        dans `_load_credentials` lit sys.modules -> le faux module suffit.
+        """
+        import sys
+        from types import ModuleType
+
+        class Request:  # signature imposée par google-auth
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+        chain = [
+            "google", "google.auth", "google.auth.transport",
+            "google.auth.transport.requests",
+        ]
+        for name in chain:
+            mod = ModuleType(name)
+            if name.endswith("requests"):
+                mod.Request = Request
+            monkeypatch.setitem(sys.modules, name, mod)
+
+    def test_missing_token_file_raises_auth_error(self, tmp_path) -> None:
+        client = GmailClient(token_path=str(tmp_path / "absent.json"))
+        with pytest.raises(GmailAuthError, match="setup-oauth"):
+            client._load_credentials(_FakeCredentialsClass)
+
+    def test_valid_token_returned_as_is(self, tmp_path) -> None:
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{}", encoding="utf-8")
+        _FakeCredentialsClass.creds = _FakeCreds(valid=True)
+        client = GmailClient(token_path=str(token_file))
+        creds = client._load_credentials(_FakeCredentialsClass)
+        assert creds.valid is True
+        assert creds.refresh_called is False
+
+    def test_expired_token_is_refreshed_and_saved(
+        self, tmp_path, fake_google_auth,
+    ) -> None:
+        token_file = tmp_path / "token.json"
+        token_file.write_text('{"token": "old"}', encoding="utf-8")
+        fake = _FakeCreds(valid=False, expired=True, refresh_token="rt-123")
+        _FakeCredentialsClass.creds = fake
+        client = GmailClient(token_path=str(token_file))
+        creds = client._load_credentials(_FakeCredentialsClass)
+        assert creds.refresh_called is True
+        assert creds.valid is True
+        # Le token rafraîchi est réécrit sur disque
+        assert "refreshed-token" in token_file.read_text(encoding="utf-8")
+
+    def test_expired_without_refresh_token_raises(self, tmp_path) -> None:
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{}", encoding="utf-8")
+        _FakeCredentialsClass.creds = _FakeCreds(
+            valid=False, expired=True, refresh_token=None,
+        )
+        client = GmailClient(token_path=str(token_file))
+        with pytest.raises(GmailAuthError, match="refresh_token"):
+            client._load_credentials(_FakeCredentialsClass)
+
+    def test_refresh_failure_raises_auth_error(
+        self, tmp_path, fake_google_auth,
+    ) -> None:
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{}", encoding="utf-8")
+
+        class _FailingCreds(_FakeCreds):
+            def refresh(self, request) -> None:
+                raise RuntimeError("network down")
+
+        _FakeCredentialsClass.creds = _FailingCreds(
+            valid=False, expired=True, refresh_token="rt-123",
+        )
+        client = GmailClient(token_path=str(token_file))
+        with pytest.raises(GmailAuthError, match="refresh failed"):
+            client._load_credentials(_FakeCredentialsClass)

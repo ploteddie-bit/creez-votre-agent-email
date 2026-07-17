@@ -133,6 +133,7 @@ class TestCriticalKeywords:
         decider._get_recent_heuristic_confidence = MagicMock(return_value=0.8)
         decider._today_actions_count = MagicMock(return_value=0)
         decider.get_window_precision = MagicMock(return_value=0.98)
+        decider._p2_volume_guards_ok = MagicMock(return_value=True)
         # archive threshold = 0.95, precision 0.98 -> OK
         assert decider.should_auto_execute(decision, email) is True
 
@@ -248,6 +249,7 @@ class TestWindowPrecision:
         decider._today_actions_count = MagicMock(return_value=0)
         # precision 0.98 > 0.95 (seuil archive) -> OK
         decider.get_window_precision = MagicMock(return_value=0.98)
+        decider._p2_volume_guards_ok = MagicMock(return_value=True)
         assert decider.should_auto_execute(decision, {
             "sender_domain": "x.com", "subject": "X", "body_snippet": "X"
         }) is True
@@ -386,3 +388,126 @@ class TestP2DefaultsAreSafe:
         assert d.should_auto_execute(decision, {
             "sender_domain": "x.com", "subject": "X", "body_snippet": "X"
         }) is False
+
+
+# ============================================================
+# Tests : gardes de volume P2 (SPEC 7.4) — E2
+# ============================================================
+
+class TestVolumeGuards:
+    """P2 interdit tant que l'historique est insuffisant."""
+
+    def _favorable_decision(self):
+        from src.models import MailDecision
+        return MailDecision(
+            classification="newsletter", executable_operation="archive",
+            confidence=0.9, reason="test",
+        )
+
+    def _mock_other_guards_ok(self, decider) -> None:
+        decider._is_known_sender = MagicMock(return_value=True)
+        decider._get_recent_heuristic_confidence = MagicMock(return_value=0.9)
+        decider._today_actions_count = MagicMock(return_value=0)
+        decider.get_window_precision = MagicMock(return_value=0.99)
+
+    def test_cold_start_blocks_auto_execute(self, decider, mock_db) -> None:
+        """0 mail, 0 proposition -> P2 ne s'auto-execute JAMAIS (E2)."""
+        # mock_db.fetchone -> None -> comptages a 0 -> garde bloquee
+        self._mock_other_guards_ok(decider)
+        assert decider.should_auto_execute(
+            self._favorable_decision(),
+            {"sender_domain": "x.com", "subject": "X", "body_snippet": "X"},
+        ) is False
+
+    def test_not_enough_emails_blocks(self, decider, mock_db) -> None:
+        """Moins de 2000 emails ingeres -> garde bloquee."""
+        mock_db.fetchone.return_value = (100,)  # 100 < 2000
+        assert decider._p2_volume_guards_ok() is False
+
+    def test_not_enough_p1_proposals_blocks(self, decider, mock_db) -> None:
+        """Emails OK mais moins de 500 propositions P1 -> bloque."""
+        mock_db.fetchone.side_effect = [
+            (decider.MIN_EMAILS_FOR_P2,),  # emails OK
+            (42,),                          # propositions P1 insuffisantes
+        ]
+        assert decider._p2_volume_guards_ok() is False
+
+    def test_reverted_archive_blocks(self, decider, mock_db) -> None:
+        """Un archivage P2 revoque par l'utilisateur -> bloque."""
+        mock_db.fetchone.side_effect = [
+            (decider.MIN_EMAILS_FOR_P2,),
+            (decider.MIN_P1_PROPOSALS_FOR_P2,),
+            (2,),  # 2 archivages revoques sur la fenetre
+        ]
+        assert decider._p2_volume_guards_ok() is False
+
+    def test_all_volumes_ok_passes(self, decider, mock_db) -> None:
+        """2000+ emails, 500+ propositions, 0 revoque -> garde OK."""
+        mock_db.fetchone.side_effect = [
+            (decider.MIN_EMAILS_FOR_P2,),
+            (decider.MIN_P1_PROPOSALS_FOR_P2,),
+            (0,),
+        ]
+        assert decider._p2_volume_guards_ok() is True
+
+    def test_queries_are_bounded(self, decider, mock_db) -> None:
+        """Les comptages utilisent LIMIT (pas de COUNT sur table entiere)."""
+        mock_db.fetchone.side_effect = [
+            (decider.MIN_EMAILS_FOR_P2,),
+            (decider.MIN_P1_PROPOSALS_FOR_P2,),
+            (0,),
+        ]
+        decider._p2_volume_guards_ok()
+        for call in mock_db.execute.call_args_list:
+            sql = " ".join(call.args[0].split())
+            assert "LIMIT %s" in sql
+
+
+# ============================================================
+# Tests : cold start precision = 0.0 (E2)
+# ============================================================
+
+class TestColdStartPrecision:
+    """Sans donnees, la precision mesuree est 0.0 (jamais 1.0)."""
+
+    def test_no_data_returns_zero(self, decider, mock_db) -> None:
+        mock_db.fetchone.return_value = None
+        assert decider.get_window_precision("archive") == 0.0
+
+    def test_empty_window_returns_zero(self, decider, mock_db) -> None:
+        mock_db.fetchone.return_value = (0, 0, 0)  # total = 0
+        assert decider.get_window_precision("archive") == 0.0
+
+    def test_no_rated_decisions_returns_zero(self, decider, mock_db) -> None:
+        mock_db.fetchone.return_value = (0, 0, 7)  # que du pending
+        assert decider.get_window_precision("archive") == 0.0
+
+    def test_rated_decisions_compute_ratio(self, decider, mock_db) -> None:
+        mock_db.fetchone.return_value = (19, 1, 20)
+        assert decider.get_window_precision("archive") == 0.95
+
+
+# ============================================================
+# Tests : SQL du _mark_decision_pending (E3)
+# ============================================================
+
+class TestMarkDecisionPendingSql:
+    """PostgreSQL refuse ORDER BY/LIMIT dans un UPDATE : sous-requete."""
+
+    def test_update_uses_subquery_on_id(self, decider, mock_db) -> None:
+        from src.models import MailDecision
+        decision = MailDecision(
+            classification="newsletter", executable_operation="archive",
+            confidence=0.9, reason="test",
+        )
+        decider._mark_decision_pending("msg_1", decision)
+        sql = " ".join(mock_db.execute.call_args.args[0].split())
+        # La partie UPDATE (avant la sous-requete) ne doit contenir
+        # ni ORDER BY ni LIMIT
+        outer = sql.split("WHERE id =")[0]
+        assert "ORDER BY" not in outer
+        assert "LIMIT" not in outer
+        # La sous-requete cible la cle primaire de la derniere decision
+        assert "SELECT id FROM decision_journal" in sql
+        assert "WHERE email_id = %s" in sql
+        assert mock_db.execute.call_args.args[1] == ("msg_1",)

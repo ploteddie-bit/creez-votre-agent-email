@@ -6,12 +6,16 @@ etre executee en autonomie (P2) ou passee en revue humaine (P1).
 Conditions pour auto-executer (toutes doivent etre vraies) :
   1. p2_enabled == True (kill-switch OFF -> ON)
   2. vacation_mode == False
-  3. sender_domain est "connu" (deja vu)
-  4. llm_confidence >= 0.3
-  5. |llm_conf - heuristic_conf| <= 0.3
-  6. Pas de mot-cle critique
-  7. Quota quotidien pas atteint (max_daily_actions)
-  8. Precision sur la fenetre glissante >= seuil specifique a l'action
+  3. Gardes de volume SPEC 7.4 : 2000+ emails ingeres, 500+ propositions
+     P1 traitees, aucun archivage P2 revoque par l'utilisateur
+  4. sender_domain est "connu" (deja vu)
+  5. llm_confidence >= 0.3
+  6. |llm_conf - heuristic_conf| <= 0.3
+  7. Pas de mot-cle critique
+  8. Quota quotidien pas atteint (max_daily_actions)
+  9. Precision sur la fenetre glissante >= seuil specifique a l'action
+     (cold start = 0.0 -> jamais auto-execute sans historique)
+  10. Moins de 3 corrections consecutives sur cette action
 
 Si 3 corrections consecutives sur la meme action, l'action est
 temporairement desactivee (rollback auto).
@@ -52,6 +56,11 @@ class GuardrailTriggered(DeciderError):
 
 class Decider:
     """Moteur de decision P2 avec garde-fous multiples."""
+
+    # Gardes de volume SPEC 7.4 : P2 ne peut s'activer qu'avec un
+    # historique suffisant (mesure, pas confiance declaree).
+    MIN_EMAILS_FOR_P2 = 2000
+    MIN_P1_PROPOSALS_FOR_P2 = 500
 
     def __init__(
         self,
@@ -119,6 +128,11 @@ class Decider:
         # 2. Mode Vacances
         if self.vacation_mode:
             logger.debug("vacation mode, forcing P1")
+            return False
+
+        # 2b. Gardes de volume (SPEC 7.4) : P2 exige un historique suffisant
+        if not self._p2_volume_guards_ok():
+            logger.info("volume guards not met (SPEC 7.4), forcing P1")
             return False
 
         # 3. Sender inconnu -> prudence
@@ -217,7 +231,8 @@ class Decider:
         """Precision mesuree sur les N dernieres decisions pour cette action.
 
         precision = approved / (approved + rejected)
-        Retourne 1.0 si pas encore de data (ne pas penaliser le cold start).
+        Retourne 0.0 si pas encore de data : cold start = aucune preuve,
+        donc aucune auto-execution (SPEC 7.4 — prudence par defaut).
         """
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -240,10 +255,10 @@ class Decider:
                 )
                 row = cur.fetchone()
                 if row is None or len(row) < 3 or row[2] == 0:
-                    return 1.0  # cold start : on laisse passer
+                    return 0.0  # cold start : pas de preuve -> pas de P2
                 approved, rejected, total = row[0], row[1], row[2]
                 if (approved + rejected) == 0:
-                    return 1.0
+                    return 0.0
                 return approved / (approved + rejected)
 
     def get_window_stats(self) -> dict[str, dict[str, Any]]:
@@ -276,7 +291,9 @@ class Decider:
                     else:
                         approved, rejected, pending = row[0], row[1], row[2]
                     total = approved + rejected
-                    precision = (approved / total) if total > 0 else 1.0
+                    # Cold start = 0.0 : le dashboard doit montrer
+                    # "sous le seuil" tant qu'il n'y a pas de preuve.
+                    precision = (approved / total) if total > 0 else 0.0
                     threshold = self.precision_thresholds.get(action, 0.95)
                     stats[action] = {
                         "precision": round(precision, 3),
@@ -315,14 +332,91 @@ class Decider:
     # ----------------------------------------------------------------
     # Helpers prives
     # ----------------------------------------------------------------
+    def _p2_volume_guards_ok(self) -> bool:
+        """Gardes de volume SPEC 7.4 (toutes requises pour le P2).
+
+        - 2000+ emails ingeres
+        - 500+ propositions P1 traitees (approuvees OU rejetees)
+        - Aucun archivage P2 revoque par l'utilisateur sur la fenetre
+
+        Les comptages sont bornes par LIMIT : on ne compte jamais
+        au-dela du seuil (perf). Un resultat vide (DB vide ou mock)
+        vaut 0 -> garde echouee -> P1 (prudence par defaut).
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # 1. Volume d'emails ingeres
+                cur.execute(
+                    "SELECT COUNT(*) FROM ("
+                    "SELECT 1 FROM emails LIMIT %s) bounded",
+                    (self.MIN_EMAILS_FOR_P2,),
+                )
+                row = cur.fetchone()
+                emails_count = row[0] if row else 0
+                if emails_count < self.MIN_EMAILS_FOR_P2:
+                    logger.info(
+                        "volume guard: %d emails < %d requis",
+                        emails_count, self.MIN_EMAILS_FOR_P2,
+                    )
+                    return False
+
+                # 2. Propositions P1 traitees
+                cur.execute(
+                    "SELECT COUNT(*) FROM ("
+                    "SELECT 1 FROM decision_journal "
+                    "WHERE phase = 'P1' AND user_approved IS NOT NULL "
+                    "LIMIT %s) bounded",
+                    (self.MIN_P1_PROPOSALS_FOR_P2,),
+                )
+                row = cur.fetchone()
+                p1_count = row[0] if row else 0
+                if p1_count < self.MIN_P1_PROPOSALS_FOR_P2:
+                    logger.info(
+                        "volume guard: %d propositions P1 < %d requises",
+                        p1_count, self.MIN_P1_PROPOSALS_FOR_P2,
+                    )
+                    return False
+
+                # 3. Aucun archivage P2 revoque sur la fenetre glissante
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM (
+                        SELECT user_approved
+                        FROM decision_journal
+                        WHERE executable_operation = 'archive'
+                          AND phase = 'P2'
+                        ORDER BY created_at DESC
+                        LIMIT %s
+                    ) recent
+                    WHERE user_approved = FALSE
+                    """,
+                    (self.window_size,),
+                )
+                row = cur.fetchone()
+                reverted = row[0] if row else 0
+                if reverted > 0:
+                    logger.warning(
+                        "volume guard: %d archivage(s) revoque(s) "
+                        "sur la fenetre -> P2 bloque",
+                        reverted,
+                    )
+                    return False
+        return True
+
     def _is_known_sender(self, domain: str) -> bool:
-        """Un domaine est 'connu' si on a deja ingere >= 5 emails de ce domaine."""
+        """Un domaine est 'connu' si on a deja ingere >= 5 emails de ce domaine.
+
+        Comptage borne par LIMIT : on ne scanne jamais plus de 5 lignes
+        (REVIEW angles morts 4.4 — pas de COUNT(*) sur table entiere).
+        """
         if not domain:
             return False
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) FROM emails WHERE sender_domain = %s",
+                    "SELECT COUNT(*) FROM ("
+                    "SELECT 1 FROM emails WHERE sender_domain = %s "
+                    "LIMIT 5) bounded",
                     (domain,),
                 )
                 count = cur.fetchone()[0]
@@ -364,12 +458,21 @@ class Decider:
     def _mark_decision_pending(
         self, email_id: str, mail_decision: MailDecision,
     ) -> None:
-        """Marque la derniere decision comme 'execution pending'."""
+        """Marque la derniere decision comme 'execution pending'.
+
+        PostgreSQL ne supporte pas ORDER BY/LIMIT dans un UPDATE :
+        on passe par une sous-requete sur la cle primaire (E3).
+        """
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE decision_journal SET execution_status = 'pending' "
-                    "WHERE email_id = %s ORDER BY created_at DESC LIMIT 1",
+                    "WHERE id = ("
+                    "    SELECT id FROM decision_journal "
+                    "    WHERE email_id = %s "
+                    "    ORDER BY created_at DESC "
+                    "    LIMIT 1"
+                    ")",
                     (email_id,),
                 )
             conn.commit()

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Any, Optional
 
 from src.config import get_settings
@@ -222,16 +223,52 @@ class GmailClient:
             self._service = build("gmail", "v1", credentials=creds, cache_discovery=False)
         return self._service
 
-    def _load_credentials(self, CredentialsClass: type) -> Any:
-        """Charge les credentials OAuth2 depuis le refresh token local.
+    def _resolve_config_path(self, path: Optional[str], default_name: str) -> Path:
+        """Résout un chemin de config (explicite, ou `configs/` à la racine)."""
+        if path:
+            return Path(path)
+        return Path(__file__).resolve().parent.parent / "configs" / default_name
 
-        Lève ``GmailAuthError`` si OAuth n'est pas encore configuré : l'utilisateur
-        doit d'abord lancer ``python -m src.main --setup-oauth`` pour générer
-        ``configs/token.json``. Le flow OAuth complet (lecture de token.json,
-        rafraîchissement automatique du access token expiré) est géré dans les
-        méthodes d'initialisation qui appellent ce chargeur.
+    def _load_credentials(self, CredentialsClass: type) -> Any:
+        """Charge les credentials OAuth2 depuis `configs/token.json`.
+
+        Comportement (E1 — fin du stub) :
+          - Token valide → retourné tel quel.
+          - Token expiré avec refresh_token → refresh automatique,
+            token rafraîchi réécrit sur disque.
+          - Token absent / invalide / refresh impossible →
+            `GmailAuthError` avec instruction explicite.
+
+        Le flow initial (génération de `token.json`) se fait via
+        `python -m src.main setup-oauth` (voir `src/main.py`).
         """
+        token_path = self._resolve_config_path(self._token_path, "token.json")
+        if not token_path.exists():
+            raise GmailAuthError(
+                f"OAuth token not found: {token_path}. "
+                "Run `python -m src.main setup-oauth` first."
+            )
+
+        creds = CredentialsClass.from_authorized_user_file(
+            str(token_path), self.scopes,
+        )
+        if creds and creds.valid:
+            return creds
+
+        if creds and creds.expired and creds.refresh_token:
+            from google.auth.transport.requests import Request
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                raise GmailAuthError(
+                    f"OAuth token refresh failed: {e}. "
+                    "Re-run `python -m src.main setup-oauth`."
+                ) from e
+            token_path.write_text(creds.to_json(), encoding="utf-8")
+            logger.info("OAuth token refreshed and saved to %s", token_path)
+            return creds
+
         raise GmailAuthError(
-            "OAuth credentials not configured. "
-            "Run `python -m src.main --setup-oauth` first."
+            f"OAuth token invalid or missing refresh_token: {token_path}. "
+            "Re-run `python -m src.main setup-oauth`."
         )

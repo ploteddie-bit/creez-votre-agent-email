@@ -247,6 +247,7 @@ def test_e2e_p2_path_with_decision_allowed(full_mocks, monkeypatch) -> None:
     decider._get_recent_heuristic_confidence = MagicMock(return_value=0.85)
     decider._today_actions_count = MagicMock(return_value=0)
     decider.get_window_precision = MagicMock(return_value=0.98)
+    decider._p2_volume_guards_ok = MagicMock(return_value=True)
     decider._mark_decision_pending = MagicMock()
 
     # Mock action_worker.enqueue_action

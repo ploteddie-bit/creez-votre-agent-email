@@ -16,6 +16,7 @@ Usage :
     python -m src.main health                # JSON health et sort
     python -m src.main dashboard             # lance le dashboard FastAPI
     python -m src.main setup-oauth           # guide pour configurer OAuth
+    python -m src.main setup-oauth --run     # lance le flow OAuth (navigateur)
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 # Permettre l'import de `src.*` depuis la racine du projet
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -158,41 +160,76 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 
 
 def cmd_setup_oauth(args: argparse.Namespace) -> int:
-    """Guide interactif pour configurer OAuth Gmail."""
-    print("=" * 60)
-    print("Setup OAuth Gmail - Agent Mail 24/7")
-    print("=" * 60)
+    """Configure OAuth Gmail : guide par defaut, flow reel avec --run.
+
+    - Sans `--run` : affiche le guide (ou l'etat si deja configure) et
+      retourne 0. Jamais de navigateur -> safe pour les scripts/tests.
+    - Avec `--run` : exige `configs/gmail-credentials.json`, lance le
+      flow OAuth installed-app (navigateur), et sauvegarde le token
+      dans `configs/token.json` (gitignored).
+    """
+    credentials_path = PROJECT_ROOT / "configs" / "gmail-credentials.json"
+    token_path = PROJECT_ROOT / "configs" / "token.json"
+    run_flow = getattr(args, "run", False)
+
+    if not credentials_path.exists():
+        print("=" * 60)
+        print("Setup OAuth Gmail - Agent Mail 24/7")
+        print("=" * 60)
+        print()
+        print(f"Fichier manquant : {credentials_path}")
+        print()
+        print("Pour le creer :")
+        print()
+        print("1. Creer un projet Google Cloud Console :")
+        print("   https://console.cloud.google.com/")
+        print()
+        print("2. Activer l'API Gmail :")
+        print("   APIs & Services > Library > chercher 'Gmail API' > Enable")
+        print()
+        print("3. Creer un ecran de consentement OAuth :")
+        print("   APIs & Services > OAuth consent screen")
+        print("   - User type: External")
+        print("   - Scopes: https://www.googleapis.com/auth/gmail.modify")
+        print("   - Test users: ajouter votre email")
+        print()
+        print("4. Creer un identifiant OAuth 2.0 :")
+        print("   APIs & Services > Credentials > Create Credentials > OAuth client ID")
+        print("   - Application type: Desktop app")
+        print("   - Download JSON")
+        print()
+        print("5. Copier le JSON telecharge vers :")
+        print(f"   {credentials_path}")
+        print()
+        print("6. Relancer : python -m src.main setup-oauth --run")
+        print()
+        print("=" * 60)
+        # Guide affiche = OK ; echec seulement si le flow etait demande
+        return 1 if run_flow else 0
+
+    if not run_flow:
+        print(f"Credentials OAuth trouves : {credentials_path}")
+        if token_path.exists():
+            print(f"Token present : {token_path}")
+        else:
+            print("Token absent. Pour lancer le flow OAuth (navigateur) :")
+            print("   python -m src.main setup-oauth --run")
+        return 0
+
+    # Flow OAuth reel (navigateur local) — uniquement avec --run
+    settings = get_settings()
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    print("Lancement du flow OAuth dans le navigateur...")
+    print(f"Scopes : {list(settings.gmail.oauth_scopes)}")
+    flow = InstalledAppFlow.from_client_secrets_file(
+        str(credentials_path), list(settings.gmail.oauth_scopes),
+    )
+    creds = flow.run_local_server(port=0)
+    token_path.write_text(creds.to_json(), encoding="utf-8")
     print()
-    print("Pour configurer OAuth, vous devez :")
-    print()
-    print("1. Creer un projet Google Cloud Console :")
-    print("   https://console.cloud.google.com/")
-    print()
-    print("2. Activer l'API Gmail :")
-    print("   APIs & Services > Library > chercher 'Gmail API' > Enable")
-    print()
-    print("3. Creer un ecran de consentement OAuth :")
-    print("   APIs & Services > OAuth consent screen")
-    print("   - User type: External")
-    print("   - Scopes: https://www.googleapis.com/auth/gmail.modify")
-    print("   - Test users: ajouter votre email")
-    print()
-    print("4. Creer un identifiant OAuth 2.0 :")
-    print("   APIs & Services > Credentials > Create Credentials > OAuth client ID")
-    print("   - Application type: Desktop app")
-    print("   - Download JSON")
-    print()
-    print("5. Copier le JSON telecharge vers :")
-    print("   configs/gmail-credentials.json")
-    print()
-    print("6. Editer configs/.env et definir :")
-    print("   EMAIL_LEARNER_GMAIL_CLIENT_ID=<votre_client_id>")
-    print("   EMAIL_LEARNER_GMAIL_CLIENT_SECRET=<votre_client_secret>")
-    print()
-    print("7. Lancer le daemon : il fera le flow OAuth au premier demarrage")
-    print("   python -m src.main")
-    print()
-    print("=" * 60)
+    print(f"Token enregistre : {token_path}")
+    print("Le daemon peut maintenant synchroniser Gmail.")
     return 0
 
 
@@ -211,21 +248,40 @@ def _handle_signal(signum: int, frame: object) -> None:
     _stop_requested = True
 
 
-def _run_one_cycle(interval_seconds: int) -> dict[str, int]:
-    """Execute un cycle complet de la boucle daemon.
+def _build_daemon_services() -> dict[str, Any]:
+    """Instancie les services du daemon UNE SEULE FOIS.
 
-    Returns: dict avec les compteurs (pour les logs / healthcheck).
+    Critique (E4 — REVIEW 2.1) : le CircuitBreaker vit dans l'observer.
+    Recreer l'observer a chaque cycle remettait le compteur de quota
+    Gmail a zero toutes les 60s, rendant le garde-fou anti-ban inoperant.
     """
     from src.action_worker import ActionWorker
     from src.embedder import Embedder
     from src.observer import GmailObserver
+
+    return {
+        "observer": GmailObserver(),
+        "embedder": Embedder(),
+        "worker": ActionWorker(),
+    }
+
+
+def _run_one_cycle(services: dict[str, Any]) -> dict[str, int]:
+    """Execute un cycle complet de la boucle daemon.
+
+    `services` contient les instances persistantes creees au demarrage
+    (observer, embedder, worker) : leurs etats internes (circuit breaker,
+    compteurs) survivent d'un cycle a l'autre.
+
+    Returns: dict avec les compteurs (pour les logs / healthcheck).
+    """
     from src.recommender import process_new_emails
 
     counters = {"synced": 0, "processed": 0, "embedded": 0, "executed": 0}
 
     # 1. Sync Gmail (delta ou full si 1er lancement)
     try:
-        obs = GmailObserver()
+        obs = services["observer"]
         if obs.get_sync_state() and obs.get_sync_state().get("last_history_id"):
             counters["synced"] = obs.sync_delta()
         else:
@@ -235,7 +291,7 @@ def _run_one_cycle(interval_seconds: int) -> dict[str, int]:
 
     # 2. Embedde les emails sans embedding
     try:
-        embedder = Embedder()
+        embedder = services["embedder"]
         counters["embedded"] = embedder.embed_unprocessed(limit=100)
     except Exception as e:
         logger.warning("embed cycle failed: %s", e)
@@ -248,7 +304,7 @@ def _run_one_cycle(interval_seconds: int) -> dict[str, int]:
 
     # 4. Worker execute les actions en queue (max 30s)
     try:
-        aw = ActionWorker()
+        aw = services["worker"]
         counters["executed"] = aw.run(max_iterations=10)
         aw.request_stop()
     except Exception as e:
@@ -278,13 +334,22 @@ def cmd_daemon(args: argparse.Namespace) -> int:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
+    # Instances persistantes (E4) : circuit breaker et etats internes
+    # survivent d'un cycle a l'autre. Avant, chaque cycle recreait
+    # l'observer -> compteur de quota Gmail remis a zero en boucle.
+    try:
+        services = _build_daemon_services()
+    except Exception as e:
+        logger.exception("failed to init daemon services: %s", e)
+        return 1
+
     cycle_count = 0
     while not _stop_requested:
         cycle_count += 1
         logger.info("=== cycle %d starting ===", cycle_count)
         cycle_start = time.time()
         try:
-            counters = _run_one_cycle(interval)
+            counters = _run_one_cycle(services)
         except Exception as e:
             logger.exception("cycle %d crashed: %s", cycle_count, e)
             counters = {}
@@ -350,8 +415,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("dashboard", help="Lance le dashboard FastAPI (Caddy en front)")
 
     # setup-oauth
-    sub.add_parser("setup-oauth",
-                   help="Affiche le guide pour configurer OAuth Gmail")
+    oauth_parser = sub.add_parser("setup-oauth",
+                                  help="Guide OAuth Gmail (--run : lance le flow)")
+    oauth_parser.add_argument("--run", action="store_true",
+                              help="Lance le flow OAuth dans le navigateur")
 
     return parser
 
